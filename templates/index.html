@@ -381,7 +381,14 @@ async function checkLogin() {
     const params = new URLSearchParams(window.location.search);
 
     if (params.get('error')) {
-        alert('Google 로그인 실패: ' + params.get('error'));
+        const errCode = params.get('error');
+        const errMsgs = {
+            'google_not_configured': 'Google OAuth가 설정되지 않았습니다.\nRailway에 GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET 환경변수를 추가해주세요.',
+            'auth_failed': 'Google 인증에 실패했습니다. 다시 시도해주세요.',
+            'invalid_state': '보안 검증 실패. 다시 로그인해주세요.',
+            'access_denied': 'Google 포토 접근이 거부되었습니다.',
+        };
+        alert(errMsgs[errCode] || 'Google 로그인 실패: ' + errCode);
         history.replaceState({}, '', '/tripvideo');
         return;
     }

@@ -52,7 +52,7 @@ def auth_google():
     """Google OAuth 시작 - Google 로그인 페이지로 리디렉트."""
     client_id = config.GOOGLE_CLIENT_ID
     if not client_id:
-        return jsonify({"error": "GOOGLE_CLIENT_ID가 설정되지 않았습니다."}), 500
+        return redirect("/tripvideo?error=google_not_configured")
 
     # API key를 세션에 임시 저장 (OAuth 콜백 후 복원용)
     api_key = request.args.get("api_key", "")
