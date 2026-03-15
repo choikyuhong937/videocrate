@@ -290,5 +290,6 @@ def serve_video(job_id):
 
 
 if __name__ == "__main__":
-    print("TripVideo - http://localhost:5000/tripvideo")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    print(f"TripVideo - http://localhost:{port}/tripvideo")
+    app.run(host="0.0.0.0", port=port, debug=True)
