@@ -1,6 +1,7 @@
-"""Google Photos OAuth 2.0 + Library API 연동 모듈.
+"""Google Photos OAuth 2.0 + Picker API 연동 모듈.
 
-흐름: OAuth 로그인 → 사진 목록 조회 → 다운로드 → 여행 분류
+흐름: OAuth 로그인 → Picker 세션 생성 → 사용자 사진 선택 → 다운로드
+(Photos Library API는 2025-03-31 폐지 → Picker API로 대체)
 """
 
 import os
@@ -10,10 +11,10 @@ from urllib.parse import urlencode
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
-PHOTOS_API_BASE = "https://photoslibrary.googleapis.com/v1"
+PICKER_API_BASE = "https://photospicker.googleapis.com/v1"
 
 SCOPES = [
-    "https://www.googleapis.com/auth/photoslibrary.readonly",
+    "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
 ]
@@ -67,44 +68,60 @@ def get_user_info(access_token):
     return resp.json()
 
 
-def list_media_items(access_token, date_from=None, date_to=None, max_items=500):
-    """Google Photos에서 미디어 목록 조회.
+# ─── Picker API ───
 
-    Args:
-        access_token: OAuth 액세스 토큰
-        date_from: 시작일 (YYYY-MM-DD)
-        date_to: 종료일 (YYYY-MM-DD)
-        max_items: 최대 조회 수
-    """
-    url = f"{PHOTOS_API_BASE}/mediaItems:search"
-    headers = {"Authorization": f"Bearer {access_token}"}
+def create_picker_session(access_token):
+    """Picker 세션을 생성하고 pickerUri와 sessionId를 반환."""
+    resp = requests.post(
+        f"{PICKER_API_BASE}/sessions",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        },
+        json={},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return {
+        "id": data.get("id", ""),
+        "pickerUri": data.get("pickerUri", ""),
+        "pollingConfig": data.get("pollingConfig", {}),
+        "mediaItemsSet": data.get("mediaItemsSet", False),
+    }
 
-    filters = {}
-    if date_from or date_to:
-        range_obj = {}
-        if date_from:
-            parts = date_from.split("-")
-            range_obj["startDate"] = {
-                "year": int(parts[0]), "month": int(parts[1]), "day": int(parts[2])
-            }
-        if date_to:
-            parts = date_to.split("-")
-            range_obj["endDate"] = {
-                "year": int(parts[0]), "month": int(parts[1]), "day": int(parts[2])
-            }
-        filters["dateFilter"] = {"ranges": [range_obj]}
 
+def poll_picker_session(access_token, session_id):
+    """Picker 세션 상태를 조회 (사용자가 사진 선택을 완료했는지 확인)."""
+    resp = requests.get(
+        f"{PICKER_API_BASE}/sessions/{session_id}",
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return {
+        "mediaItemsSet": data.get("mediaItemsSet", False),
+        "pollingConfig": data.get("pollingConfig", {}),
+    }
+
+
+def list_picker_media_items(access_token, session_id):
+    """Picker 세션에서 선택된 미디어 아이템 목록을 조회."""
     all_items = []
     page_token = None
 
-    while len(all_items) < max_items:
-        body = {"pageSize": min(100, max_items - len(all_items))}
-        if filters:
-            body["filters"] = filters
+    while True:
+        params = {"sessionId": session_id, "pageSize": 100}
         if page_token:
-            body["pageToken"] = page_token
+            params["pageToken"] = page_token
 
-        resp = requests.post(url, headers=headers, json=body, timeout=30)
+        resp = requests.get(
+            f"{PICKER_API_BASE}/mediaItems",
+            headers={"Authorization": f"Bearer {access_token}"},
+            params=params,
+            timeout=30,
+        )
         resp.raise_for_status()
         data = resp.json()
 
@@ -115,13 +132,26 @@ def list_media_items(access_token, date_from=None, date_to=None, max_items=500):
         if not page_token:
             break
 
-    print(f"[google_photos] {len(all_items)}개 미디어 항목 조회됨")
+    print(f"[picker] {len(all_items)}개 미디어 항목 선택됨")
     return all_items
+
+
+def delete_picker_session(access_token, session_id):
+    """Picker 세션 삭제 (정리)."""
+    try:
+        requests.delete(
+            f"{PICKER_API_BASE}/sessions/{session_id}",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+    except Exception as e:
+        print(f"[picker] 세션 삭제 실패 (무시): {e}")
 
 
 def download_media(media_items, download_dir):
     """미디어 아이템을 로컬에 다운로드.
 
+    Picker API의 mediaItems 형식에 맞게 처리.
     Returns:
         fetcher 호환 형식의 미디어 파일 리스트
     """
@@ -130,12 +160,14 @@ def download_media(media_items, download_dir):
 
     for idx, item in enumerate(media_items):
         try:
-            base_url = item.get("baseUrl")
+            # Picker API 응답 형식: mediaFile.baseUrl
+            media_file = item.get("mediaFile", {})
+            base_url = media_file.get("baseUrl") or item.get("baseUrl")
             if not base_url:
                 continue
 
-            mime = item.get("mimeType", "")
-            filename = item.get("filename", f"photo_{idx}.jpg")
+            mime = media_file.get("mimeType", item.get("mimeType", ""))
+            filename = media_file.get("filename", item.get("filename", f"photo_{idx}.jpg"))
 
             # 중복 파일명 처리
             file_path = os.path.join(download_dir, filename)
@@ -158,8 +190,11 @@ def download_media(media_items, download_dir):
                 for chunk in resp.iter_content(8192):
                     f.write(chunk)
 
-            metadata = item.get("mediaMetadata", {})
-            creation_time = metadata.get("creationTime", "")
+            # Picker API: createTime은 최상위 또는 mediaFile.mediaMetadata 안에 있음
+            creation_time = item.get("createTime", "")
+            metadata = media_file.get("mediaMetadata", {})
+            if not creation_time:
+                creation_time = metadata.get("creationTime", "")
 
             downloaded.append({
                 "path": file_path,
@@ -169,10 +204,10 @@ def download_media(media_items, download_dir):
             })
 
             if (idx + 1) % 20 == 0:
-                print(f"[google_photos] {idx + 1}/{len(media_items)} 다운로드 완료")
+                print(f"[picker] {idx + 1}/{len(media_items)} 다운로드 완료")
 
         except Exception as e:
-            print(f"[google_photos] 다운로드 실패: {item.get('filename', '?')} - {e}")
+            print(f"[picker] 다운로드 실패: {item.get('filename', '?')} - {e}")
 
-    print(f"[google_photos] 총 {len(downloaded)}/{len(media_items)} 다운로드 완료")
+    print(f"[picker] 총 {len(downloaded)}/{len(media_items)} 다운로드 완료")
     return downloaded

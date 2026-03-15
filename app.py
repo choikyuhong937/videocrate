@@ -21,7 +21,9 @@ from subtitles import generate_subtitles, write_srt
 from video import generate_video
 from google_photos import (
     get_auth_url, exchange_code, get_user_info,
-    list_media_items, download_media, refresh_access_token,
+    download_media, refresh_access_token,
+    create_picker_session, poll_picker_session,
+    list_picker_media_items, delete_picker_session,
 )
 
 app = Flask(__name__)
@@ -135,24 +137,56 @@ def api_user():
     return jsonify({"logged_in": False})
 
 
-# ─── Google Photos Fetch ───
+# ─── Google Photos Picker API ───
 
-def fetch_google_photos(upload_id, access_token, date_from, date_to):
-    """Google Photos에서 사진을 가져와 여행별로 자동 분류."""
+@app.route("/api/picker/create-session", methods=["POST"])
+def picker_create_session():
+    """Picker 세션 생성 → pickerUri 반환."""
+    access_token = session.get("google_access_token")
+    if not access_token:
+        return jsonify({"error": "Google 로그인이 필요합니다."}), 401
+
+    try:
+        result = create_picker_session(access_token)
+        # 세션 ID 저장 (나중에 정리용)
+        session["picker_session_id"] = result["id"]
+        return jsonify(result)
+    except Exception as e:
+        print(f"[picker] 세션 생성 에러: {e}")
+        return jsonify({"error": f"Picker 세션 생성 실패: {str(e)}"}), 500
+
+
+@app.route("/api/picker/poll/<picker_session_id>")
+def picker_poll(picker_session_id):
+    """Picker 세션 폴링 (사용자 선택 완료 여부 확인)."""
+    access_token = session.get("google_access_token")
+    if not access_token:
+        return jsonify({"error": "Google 로그인이 필요합니다."}), 401
+
+    try:
+        result = poll_picker_session(access_token, picker_session_id)
+        return jsonify(result)
+    except Exception as e:
+        print(f"[picker] 폴링 에러: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+def fetch_picker_photos(upload_id, access_token, picker_session_id):
+    """Picker에서 선택된 사진을 다운로드하고 여행별로 분류."""
     sess = sessions[upload_id]
     try:
-        # 1단계: Google Photos API로 미디어 목록 조회
+        # 1단계: 선택된 미디어 목록 조회
         sess["status"] = "fetching"
-        sess["message"] = "구글 포토에서 사진을 가져오고 있습니다..."
+        sess["message"] = "선택한 사진 정보를 가져오고 있습니다..."
 
-        items = list_media_items(access_token, date_from=date_from, date_to=date_to)
+        items = list_picker_media_items(access_token, picker_session_id)
 
         if not items:
             sess["status"] = "error"
-            sess["message"] = "해당 기간에 사진이 없습니다. 날짜를 조정해보세요."
+            sess["message"] = "선택된 사진이 없습니다."
             return
 
-        sess["message"] = f"{len(items)}개 사진 발견! 다운로드 중..."
+        sess["message"] = f"{len(items)}개 사진을 다운로드하고 있습니다..."
 
         # 2단계: 다운로드
         download_dir = os.path.join(UPLOAD_DIR, upload_id)
@@ -199,41 +233,39 @@ def fetch_google_photos(upload_id, access_token, date_from, date_to):
         sess["location_groups"] = location_groups
         sess["trips"] = trips
 
+        # Picker 세션 정리
+        delete_picker_session(access_token, picker_session_id)
+
     except Exception as e:
         sess["status"] = "error"
         sess["message"] = f"구글 포토 연동 중 오류: {str(e)}"
-        print(f"[google_photos] fetch error: {e}")
+        print(f"[picker] fetch error: {e}")
 
 
-@app.route("/api/google-photos/fetch", methods=["POST"])
-def google_photos_fetch():
-    """Google Photos에서 사진 가져오기 시작."""
+@app.route("/api/picker/fetch", methods=["POST"])
+def picker_fetch():
+    """Picker에서 선택된 사진 다운로드 & 분석 시작."""
     access_token = session.get("google_access_token")
     if not access_token:
         return jsonify({"error": "Google 로그인이 필요합니다."}), 401
 
     data = request.get_json() or {}
-    date_from = data.get("date_from")
-    date_to = data.get("date_to")
-
-    # 기본: 최근 6개월
-    if not date_from:
-        date_from = (datetime.now() - timedelta(days=180)).strftime("%Y-%m-%d")
-    if not date_to:
-        date_to = datetime.now().strftime("%Y-%m-%d")
+    picker_session_id = data.get("picker_session_id")
+    if not picker_session_id:
+        return jsonify({"error": "Picker 세션 ID가 없습니다."}), 400
 
     upload_id = str(uuid.uuid4())[:8]
     sessions[upload_id] = {
         "status": "fetching",
-        "message": "구글 포토에 연결하고 있습니다...",
+        "message": "선택한 사진을 가져오고 있습니다...",
         "folder": "",
         "uploaded_count": 0,
         "trips": [],
     }
 
     thread = threading.Thread(
-        target=fetch_google_photos,
-        args=(upload_id, access_token, date_from, date_to),
+        target=fetch_picker_photos,
+        args=(upload_id, access_token, picker_session_id),
     )
     thread.daemon = True
     thread.start()
