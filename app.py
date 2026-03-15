@@ -83,7 +83,12 @@ def analyze_uploads(upload_id: str, folder_path: str):
 
 
 @app.route("/")
-def index():
+def root():
+    return render_template("index.html")
+
+
+@app.route("/tripvideo")
+def tripvideo():
     return render_template("index.html")
 
 
@@ -285,5 +290,5 @@ def serve_video(job_id):
 
 
 if __name__ == "__main__":
-    print("VideoCrate Web - http://localhost:5000")
+    print("TripVideo - http://localhost:5000/tripvideo")
     app.run(host="0.0.0.0", port=5000, debug=True)
