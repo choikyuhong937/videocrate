@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VideoCrate - 여행 영상 자동 생성기</title>
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --surface: #14141f;
+            --surface2: #1e1e2e;
+            --border: #2a2a3e;
+            --text: #e4e4ef;
+            --text-dim: #8888a0;
+            --accent: #7c6aef;
+            --accent-light: #9d8fff;
+            --accent-glow: rgba(124, 106, 239, 0.15);
+            --success: #4ade80;
+            --error: #f87171;
+            --gradient: linear-gradient(135deg, #7c6aef 0%, #c084fc 100%);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Background effect */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(ellipse at 30% 20%, rgba(124, 106, 239, 0.06) 0%, transparent 50%),
+                        radial-gradient(ellipse at 70% 80%, rgba(192, 132, 252, 0.04) 0%, transparent 50%);
+            z-index: -1;
+        }
+
+        .container {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .logo {
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--accent-light);
+            margin-bottom: 16px;
+        }
+
+        .header h1 {
+            font-size: 36px;
+            font-weight: 700;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 12px;
+        }
+
+        .header p {
+            color: var(--text-dim);
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        /* Card */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            margin-bottom: 24px;
+        }
+
+        /* Upload zone */
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 48px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 28px;
+            position: relative;
+        }
+
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--accent);
+            background: var(--accent-glow);
+        }
+
+        .upload-zone.has-files {
+            border-color: var(--success);
+            border-style: solid;
+            background: rgba(74, 222, 128, 0.05);
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .upload-zone h3 {
+            font-size: 18px;
+            margin-bottom: 8px;
+            color: var(--text);
+        }
+
+        .upload-zone p {
+            color: var(--text-dim);
+            font-size: 14px;
+        }
+
+        .file-count {
+            color: var(--success);
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        input[type="file"] { display: none; }
+
+        /* Preview grid */
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 8px;
+            margin-top: 16px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .preview-grid img {
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        /* Settings */
+        .settings {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .field label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-dim);
+            margin-bottom: 6px;
+        }
+
+        .field select, .field input {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .field select:focus, .field input:focus {
+            border-color: var(--accent);
+        }
+
+        /* Button */
+        .btn {
+            width: 100%;
+            padding: 14px 24px;
+            background: var(--gradient);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            letter-spacing: 0.5px;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 24px rgba(124, 106, 239, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            margin-top: 12px;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: var(--border);
+            box-shadow: none;
+            transform: none;
+        }
+
+        /* Progress section */
+        .progress-section { display: none; }
+        .progress-section.active { display: block; }
+
+        .steps {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 14px 0;
+            position: relative;
+        }
+
+        .step:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 44px;
+            width: 2px;
+            height: calc(100% - 28px);
+            background: var(--border);
+        }
+
+        .step.active:not(:last-child)::after {
+            background: var(--accent);
+        }
+
+        .step-dot {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--surface2);
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .step.active .step-dot {
+            border-color: var(--accent);
+            background: var(--accent-glow);
+        }
+
+        .step.done .step-dot {
+            border-color: var(--success);
+            background: rgba(74, 222, 128, 0.15);
+        }
+
+        .step-content h4 {
+            font-size: 15px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .step.active h4 { color: var(--accent-light); }
+        .step.done h4 { color: var(--success); }
+        .step.pending h4 { color: var(--text-dim); }
+
+        .step-content p {
+            font-size: 13px;
+            color: var(--text-dim);
+        }
+
+        /* Spinner */
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--accent-glow);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Result section */
+        .result-section { display: none; }
+        .result-section.active { display: block; }
+
+        .video-player {
+            width: 100%;
+            border-radius: 12px;
+            background: #000;
+            margin-bottom: 24px;
+        }
+
+        .result-info {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        .info-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            background: var(--surface2);
+            border-radius: 20px;
+            font-size: 13px;
+            color: var(--text-dim);
+        }
+
+        .info-badge span { color: var(--text); font-weight: 500; }
+
+        .download-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .download-buttons .btn {
+            flex: 1;
+        }
+
+        /* Error */
+        .error-box {
+            background: rgba(248, 113, 113, 0.1);
+            border: 1px solid rgba(248, 113, 113, 0.3);
+            border-radius: 10px;
+            padding: 16px;
+            color: var(--error);
+            text-align: center;
+            display: none;
+        }
+
+        .error-box.active { display: block; }
+
+        /* Groups info */
+        .groups-info {
+            margin-top: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .group-tag {
+            padding: 4px 10px;
+            background: var(--accent-glow);
+            border: 1px solid rgba(124, 106, 239, 0.2);
+            border-radius: 6px;
+            font-size: 12px;
+            color: var(--accent-light);
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            margin-top: 48px;
+            color: var(--text-dim);
+            font-size: 13px;
+        }
+
+        /* New video button */
+        .new-video-link {
+            display: inline-block;
+            margin-top: 16px;
+            color: var(--accent-light);
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .new-video-link:hover { text-decoration: underline; }
+
+        @media (max-width: 480px) {
+            .header h1 { font-size: 28px; }
+            .settings { grid-template-columns: 1fr; }
+            .download-buttons { flex-direction: column; }
+            .container { padding: 24px 16px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo">VideoCrate</div>
+            <h1>여행 영상 자동 생성기</h1>
+            <p>사진을 올리면 AI가 베스트를 골라<br>감성 자막과 함께 영상으로 만들어드립니다</p>
+        </div>
+
+        <!-- Upload Section -->
+        <div id="uploadSection" class="card">
+            <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+                <div class="upload-icon">+</div>
+                <h3>여행 사진을 드래그하거나 클릭해서 올려주세요</h3>
+                <p>JPG, PNG, HEIC, MP4, MOV 지원 (최대 500MB)</p>
+                <div class="preview-grid" id="previewGrid"></div>
+            </div>
+            <input type="file" id="fileInput" multiple accept="image/*,video/*">
+
+            <div class="settings">
+                <div class="field">
+                    <label>최대 사진 수</label>
+                    <select id="maxPhotos">
+                        <option value="10">10장</option>
+                        <option value="20">20장</option>
+                        <option value="30" selected>30장</option>
+                        <option value="50">50장</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>사진당 시간</label>
+                    <select id="duration">
+                        <option value="3">3초</option>
+                        <option value="4" selected>4초</option>
+                        <option value="5">5초</option>
+                        <option value="6">6초</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>장소별 최대</label>
+                    <select id="maxPerGroup">
+                        <option value="3">3장</option>
+                        <option value="5" selected>5장</option>
+                        <option value="8">8장</option>
+                        <option value="10">10장</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>자막 언어</label>
+                    <select id="lang">
+                        <option value="ko" selected>한국어</option>
+                        <option value="en">English</option>
+                        <option value="ja">日本語</option>
+                    </select>
+                </div>
+            </div>
+
+            <button class="btn" id="generateBtn" onclick="startGeneration()" disabled>
+                사진을 먼저 올려주세요
+            </button>
+        </div>
+
+        <!-- Progress Section -->
+        <div id="progressSection" class="card progress-section">
+            <div class="steps">
+                <div class="step pending" id="step1">
+                    <div class="step-dot">1</div>
+                    <div class="step-content">
+                        <h4>미디어 스캔</h4>
+                        <p>업로드된 파일을 분석합니다</p>
+                    </div>
+                </div>
+                <div class="step pending" id="step2">
+                    <div class="step-dot">2</div>
+                    <div class="step-content">
+                        <h4>장소 분류</h4>
+                        <p>GPS 정보로 장소별로 그룹핑합니다</p>
+                        <div class="groups-info" id="groupsInfo"></div>
+                    </div>
+                </div>
+                <div class="step pending" id="step3">
+                    <div class="step-dot">3</div>
+                    <div class="step-content">
+                        <h4>AI 선별</h4>
+                        <p>Gemini AI가 베스트 사진을 고릅니다</p>
+                    </div>
+                </div>
+                <div class="step pending" id="step4">
+                    <div class="step-dot">4</div>
+                    <div class="step-content">
+                        <h4>자막 생성</h4>
+                        <p>AI가 감성 자막을 만듭니다</p>
+                    </div>
+                </div>
+                <div class="step pending" id="step5">
+                    <div class="step-dot">5</div>
+                    <div class="step-content">
+                        <h4>영상 렌더링</h4>
+                        <p>Ken Burns 효과와 자막을 합성합니다</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="error-box" id="errorBox"></div>
+        </div>
+
+        <!-- Result Section -->
+        <div id="resultSection" class="card result-section">
+            <video class="video-player" id="videoPlayer" controls></video>
+
+            <div class="result-info" id="resultInfo"></div>
+
+            <div class="download-buttons">
+                <button class="btn" id="downloadVideoBtn" onclick="downloadFile('video')">
+                    MP4 다운로드
+                </button>
+                <button class="btn btn-secondary" id="downloadSrtBtn" onclick="downloadFile('srt')">
+                    SRT 자막 다운로드
+                </button>
+            </div>
+
+            <div style="text-align: center">
+                <a href="/" class="new-video-link">+ 새 영상 만들기</a>
+            </div>
+        </div>
+
+        <div class="footer">
+            VideoCrate &middot; Gemini AI + FFmpeg
+        </div>
+    </div>
+
+    <script>
+        let selectedFiles = [];
+        let currentJobId = null;
+        let pollTimer = null;
+
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const generateBtn = document.getElementById('generateBtn');
+        const previewGrid = document.getElementById('previewGrid');
+
+        // Drag & Drop
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        function handleFiles(files) {
+            selectedFiles = Array.from(files);
+            updateUploadUI();
+        }
+
+        function updateUploadUI() {
+            const count = selectedFiles.length;
+            if (count === 0) return;
+
+            uploadZone.classList.add('has-files');
+            uploadZone.querySelector('.upload-icon').textContent = '';
+            uploadZone.querySelector('h3').innerHTML = `<span class="file-count">${count}개 파일</span> 선택됨`;
+            uploadZone.querySelector('p').textContent = '클릭하여 다시 선택할 수 있습니다';
+
+            // 미리보기
+            previewGrid.innerHTML = '';
+            const imageFiles = selectedFiles.filter(f => f.type.startsWith('image/'));
+            const previewCount = Math.min(imageFiles.length, 12);
+            for (let i = 0; i < previewCount; i++) {
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(imageFiles[i]);
+                previewGrid.appendChild(img);
+            }
+            if (imageFiles.length > 12) {
+                const more = document.createElement('div');
+                more.style.cssText = 'display:flex;align-items:center;justify-content:center;background:var(--surface2);border-radius:8px;font-size:13px;color:var(--text-dim);aspect-ratio:1;';
+                more.textContent = `+${imageFiles.length - 12}`;
+                previewGrid.appendChild(more);
+            }
+
+            generateBtn.disabled = false;
+            generateBtn.textContent = `영상 만들기 (${count}개 파일)`;
+        }
+
+        async function startGeneration() {
+            if (selectedFiles.length === 0) return;
+
+            generateBtn.disabled = true;
+            generateBtn.textContent = '업로드 중...';
+
+            const formData = new FormData();
+            for (const file of selectedFiles) {
+                formData.append('photos', file);
+            }
+            formData.append('max_photos', document.getElementById('maxPhotos').value);
+            formData.append('max_per_group', document.getElementById('maxPerGroup').value);
+            formData.append('duration', document.getElementById('duration').value);
+            formData.append('lang', document.getElementById('lang').value);
+
+            try {
+                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (data.error) {
+                    alert(data.error);
+                    generateBtn.disabled = false;
+                    generateBtn.textContent = `영상 만들기 (${selectedFiles.length}개 파일)`;
+                    return;
+                }
+
+                currentJobId = data.job_id;
+                document.getElementById('uploadSection').style.display = 'none';
+                document.getElementById('progressSection').classList.add('active');
+                pollStatus();
+            } catch (e) {
+                alert('업로드 실패: ' + e.message);
+                generateBtn.disabled = false;
+                generateBtn.textContent = `영상 만들기 (${selectedFiles.length}개 파일)`;
+            }
+        }
+
+        async function pollStatus() {
+            if (!currentJobId) return;
+
+            try {
+                const res = await fetch(`/api/status/${currentJobId}`);
+                const job = await res.json();
+
+                updateProgress(job);
+
+                if (job.status === 'done') {
+                    showResult(job);
+                    return;
+                }
+
+                if (job.status === 'error') {
+                    document.getElementById('errorBox').textContent = job.message;
+                    document.getElementById('errorBox').classList.add('active');
+                    return;
+                }
+
+                pollTimer = setTimeout(pollStatus, 1000);
+            } catch (e) {
+                pollTimer = setTimeout(pollStatus, 2000);
+            }
+        }
+
+        function updateProgress(job) {
+            const currentStep = job.step || 0;
+
+            for (let i = 1; i <= 5; i++) {
+                const el = document.getElementById(`step${i}`);
+                el.className = 'step';
+
+                if (i < currentStep) {
+                    el.className = 'step done';
+                    el.querySelector('.step-dot').textContent = '\u2713';
+                } else if (i === currentStep) {
+                    el.className = 'step active';
+                    el.querySelector('.step-dot').innerHTML = '<div class="spinner"></div>';
+                } else {
+                    el.className = 'step pending';
+                    el.querySelector('.step-dot').textContent = i;
+                }
+            }
+
+            // 그룹 정보 표시
+            if (job.groups && job.groups.length > 0) {
+                const groupsInfo = document.getElementById('groupsInfo');
+                groupsInfo.innerHTML = job.groups.map(g =>
+                    `<span class="group-tag">${g.name} (${g.count})</span>`
+                ).join('');
+            }
+
+            // 스텝별 상세 정보 업데이트
+            if (currentStep >= 1 && job.total_files) {
+                document.querySelector('#step1 p').textContent = `${job.total_files}개 파일 발견`;
+            }
+            if (currentStep >= 2 && job.total_groups) {
+                document.querySelector('#step2 p').textContent = `${job.total_groups}개 장소로 분류됨`;
+            }
+            if (currentStep >= 3 && job.selected_count) {
+                document.querySelector('#step3 p').textContent = `${job.selected_count}개 미디어 선별됨`;
+            }
+        }
+
+        function showResult(job) {
+            document.getElementById('progressSection').classList.remove('active');
+            document.getElementById('resultSection').classList.add('active');
+
+            const player = document.getElementById('videoPlayer');
+            player.src = `/video/${currentJobId}`;
+
+            const info = document.getElementById('resultInfo');
+            const badges = [];
+            if (job.total_files) badges.push(`<div class="info-badge">원본 <span>${job.total_files}개</span></div>`);
+            if (job.selected_count) badges.push(`<div class="info-badge">선별 <span>${job.selected_count}개</span></div>`);
+            if (job.total_groups) badges.push(`<div class="info-badge">장소 <span>${job.total_groups}곳</span></div>`);
+            info.innerHTML = badges.join('');
+        }
+
+        function downloadFile(type) {
+            if (!currentJobId) return;
+            window.location.href = `/api/download/${currentJobId}/${type}`;
+        }
+    </script>
+</body>
+</html>
