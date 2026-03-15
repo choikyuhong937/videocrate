@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """VideoCrate Web - 여행 영상 자동 생성 웹 앱.
 
-흐름: 사진 업로드 → 여행 자동 분류 → 여행 선택 → 영상 생성
+흐름: Google 로그인 → 구글포토 자동 연동 → 여행 카드 선택 → 영상 생성
 """
 
 import os
@@ -9,9 +9,9 @@ import uuid
 import json
 import shutil
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, redirect, session, url_for
 
 import config
 from fetcher import scan_local_folder
@@ -19,9 +19,14 @@ from metadata import enrich_media_with_metadata, group_by_location
 from selector import select_best_photos
 from subtitles import generate_subtitles, write_srt
 from video import generate_video
+from google_photos import (
+    get_auth_url, exchange_code, get_user_info,
+    list_media_items, download_media, refresh_access_token,
+)
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500MB
+app.secret_key = config.FLASK_SECRET_KEY
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
@@ -33,22 +38,131 @@ sessions = {}  # upload_id → {folder, media_files, location_groups}
 jobs = {}      # job_id → {status, step, message, ...}
 
 
-# ─── Phase 1: 업로드 & 여행 분류 ───
+def _get_redirect_uri():
+    """OAuth 콜백 URI를 현재 요청 기반으로 생성."""
+    scheme = request.headers.get("X-Forwarded-Proto", request.scheme)
+    host = request.headers.get("X-Forwarded-Host", request.host)
+    return f"{scheme}://{host}/auth/callback"
 
-def analyze_uploads(upload_id: str, folder_path: str):
-    """업로드된 사진을 스캔하고 여행별로 자동 분류."""
-    session = sessions[upload_id]
+
+# ─── OAuth Routes ───
+
+@app.route("/auth/google")
+def auth_google():
+    """Google OAuth 시작 - Google 로그인 페이지로 리디렉트."""
+    client_id = config.GOOGLE_CLIENT_ID
+    if not client_id:
+        return jsonify({"error": "GOOGLE_CLIENT_ID가 설정되지 않았습니다."}), 500
+
+    # state에 API key를 포함 (콜백 후 복원용)
+    api_key = request.args.get("api_key", "")
+    state = api_key
+
+    redirect_uri = _get_redirect_uri()
+    auth_url = get_auth_url(client_id, redirect_uri, state=state)
+    return redirect(auth_url)
+
+
+@app.route("/auth/callback")
+def auth_callback():
+    """Google OAuth 콜백 - 토큰 교환 후 메인 페이지로."""
+    code = request.args.get("code")
+    error = request.args.get("error")
+    state = request.args.get("state", "")  # api_key
+
+    if error:
+        return redirect(f"/tripvideo?error={error}")
+
+    if not code:
+        return redirect("/tripvideo?error=no_code")
+
     try:
-        session["status"] = "scanning"
-        session["message"] = "미디어 파일을 스캔하고 있습니다..."
-        media_files = scan_local_folder(folder_path)
-        if not media_files:
-            session["status"] = "error"
-            session["message"] = "미디어 파일을 찾을 수 없습니다."
+        redirect_uri = _get_redirect_uri()
+        tokens = exchange_code(
+            code, config.GOOGLE_CLIENT_ID, config.GOOGLE_CLIENT_SECRET, redirect_uri
+        )
+
+        access_token = tokens["access_token"]
+        refresh_token = tokens.get("refresh_token", "")
+
+        # 사용자 정보 조회
+        user_info = get_user_info(access_token)
+
+        # 세션에 저장
+        session["google_access_token"] = access_token
+        session["google_refresh_token"] = refresh_token
+        session["google_user"] = {
+            "email": user_info.get("email", ""),
+            "name": user_info.get("name", ""),
+            "picture": user_info.get("picture", ""),
+        }
+
+        # API key를 쿼리 파라미터로 전달
+        return redirect(f"/tripvideo?logged_in=1&api_key={state}")
+
+    except Exception as e:
+        print(f"[auth] OAuth 에러: {e}")
+        return redirect(f"/tripvideo?error=auth_failed")
+
+
+@app.route("/auth/logout")
+def auth_logout():
+    """로그아웃."""
+    session.clear()
+    return redirect("/tripvideo")
+
+
+@app.route("/api/user")
+def api_user():
+    """현재 로그인 사용자 정보."""
+    google_user = session.get("google_user")
+    if google_user:
+        return jsonify({
+            "logged_in": True,
+            "email": google_user["email"],
+            "name": google_user["name"],
+            "picture": google_user["picture"],
+        })
+    return jsonify({"logged_in": False})
+
+
+# ─── Google Photos Fetch ───
+
+def fetch_google_photos(upload_id, access_token, date_from, date_to):
+    """Google Photos에서 사진을 가져와 여행별로 자동 분류."""
+    sess = sessions[upload_id]
+    try:
+        # 1단계: Google Photos API로 미디어 목록 조회
+        sess["status"] = "fetching"
+        sess["message"] = "구글 포토에서 사진을 가져오고 있습니다..."
+
+        items = list_media_items(access_token, date_from=date_from, date_to=date_to)
+
+        if not items:
+            sess["status"] = "error"
+            sess["message"] = "해당 기간에 사진이 없습니다. 날짜를 조정해보세요."
             return
 
-        session["status"] = "analyzing"
-        session["message"] = "GPS/날짜 정보를 분석하고 여행을 분류하고 있습니다..."
+        sess["message"] = f"{len(items)}개 사진 발견! 다운로드 중..."
+
+        # 2단계: 다운로드
+        download_dir = os.path.join(UPLOAD_DIR, upload_id)
+        os.makedirs(download_dir, exist_ok=True)
+
+        media_files = download_media(items, download_dir)
+
+        if not media_files:
+            sess["status"] = "error"
+            sess["message"] = "사진을 다운로드할 수 없습니다."
+            return
+
+        sess["folder"] = download_dir
+        sess["uploaded_count"] = len(media_files)
+
+        # 3단계: EXIF 분석 + 여행 분류
+        sess["status"] = "analyzing"
+        sess["message"] = "GPS/날짜 정보를 분석하고 여행을 분류하고 있습니다..."
+
         media_files = enrich_media_with_metadata(media_files)
         location_groups = group_by_location(media_files)
 
@@ -58,7 +172,6 @@ def analyze_uploads(upload_id: str, folder_path: str):
             image_files = [f for f in group["files"] if f["type"] == "image"]
             video_files = [f for f in group["files"] if f["type"] == "video"]
 
-            # 대표 이미지 (첫 번째 이미지의 파일명)
             thumbnail = image_files[0]["filename"] if image_files else None
 
             trips.append({
@@ -71,15 +184,98 @@ def analyze_uploads(upload_id: str, folder_path: str):
                 "thumbnail": thumbnail,
             })
 
-        session["status"] = "ready"
-        session["message"] = "여행 분류 완료!"
-        session["media_files"] = media_files
-        session["location_groups"] = location_groups
-        session["trips"] = trips
+        sess["status"] = "ready"
+        sess["message"] = "여행 분류 완료!"
+        sess["media_files"] = media_files
+        sess["location_groups"] = location_groups
+        sess["trips"] = trips
 
     except Exception as e:
-        session["status"] = "error"
-        session["message"] = f"분석 중 오류: {str(e)}"
+        sess["status"] = "error"
+        sess["message"] = f"구글 포토 연동 중 오류: {str(e)}"
+        print(f"[google_photos] fetch error: {e}")
+
+
+@app.route("/api/google-photos/fetch", methods=["POST"])
+def google_photos_fetch():
+    """Google Photos에서 사진 가져오기 시작."""
+    access_token = session.get("google_access_token")
+    if not access_token:
+        return jsonify({"error": "Google 로그인이 필요합니다."}), 401
+
+    data = request.get_json() or {}
+    date_from = data.get("date_from")
+    date_to = data.get("date_to")
+
+    # 기본: 최근 6개월
+    if not date_from:
+        date_from = (datetime.now() - timedelta(days=180)).strftime("%Y-%m-%d")
+    if not date_to:
+        date_to = datetime.now().strftime("%Y-%m-%d")
+
+    upload_id = str(uuid.uuid4())[:8]
+    sessions[upload_id] = {
+        "status": "fetching",
+        "message": "구글 포토에 연결하고 있습니다...",
+        "folder": "",
+        "uploaded_count": 0,
+        "trips": [],
+    }
+
+    thread = threading.Thread(
+        target=fetch_google_photos,
+        args=(upload_id, access_token, date_from, date_to),
+    )
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({"upload_id": upload_id})
+
+
+# ─── Phase 1: 업로드 & 여행 분류 (수동 업로드 - fallback) ───
+
+def analyze_uploads(upload_id: str, folder_path: str):
+    """업로드된 사진을 스캔하고 여행별로 자동 분류."""
+    s = sessions[upload_id]
+    try:
+        s["status"] = "scanning"
+        s["message"] = "미디어 파일을 스캔하고 있습니다..."
+        media_files = scan_local_folder(folder_path)
+        if not media_files:
+            s["status"] = "error"
+            s["message"] = "미디어 파일을 찾을 수 없습니다."
+            return
+
+        s["status"] = "analyzing"
+        s["message"] = "GPS/날짜 정보를 분석하고 여행을 분류하고 있습니다..."
+        media_files = enrich_media_with_metadata(media_files)
+        location_groups = group_by_location(media_files)
+
+        trips = []
+        for i, group in enumerate(location_groups):
+            image_files = [f for f in group["files"] if f["type"] == "image"]
+            video_files = [f for f in group["files"] if f["type"] == "video"]
+            thumbnail = image_files[0]["filename"] if image_files else None
+
+            trips.append({
+                "id": i,
+                "location": group["location_name"],
+                "date_range": group.get("date_range", ""),
+                "photo_count": len(image_files),
+                "video_count": len(video_files),
+                "total_count": len(group["files"]),
+                "thumbnail": thumbnail,
+            })
+
+        s["status"] = "ready"
+        s["message"] = "여행 분류 완료!"
+        s["media_files"] = media_files
+        s["location_groups"] = location_groups
+        s["trips"] = trips
+
+    except Exception as e:
+        s["status"] = "error"
+        s["message"] = f"분석 중 오류: {str(e)}"
 
 
 @app.route("/")
@@ -131,24 +327,24 @@ def upload():
 @app.route("/api/analyze/<upload_id>")
 def analyze_status(upload_id):
     """업로드 분석 상태 조회."""
-    session = sessions.get(upload_id)
-    if not session:
+    s = sessions.get(upload_id)
+    if not s:
         return jsonify({"error": "세션을 찾을 수 없습니다."}), 404
     return jsonify({
-        "status": session["status"],
-        "message": session["message"],
-        "trips": session.get("trips", []),
-        "uploaded_count": session.get("uploaded_count", 0),
+        "status": s["status"],
+        "message": s["message"],
+        "trips": s.get("trips", []),
+        "uploaded_count": s.get("uploaded_count", 0),
     })
 
 
 @app.route("/api/thumbnail/<upload_id>/<filename>")
 def thumbnail(upload_id, filename):
     """업로드된 이미지 썸네일 제공."""
-    session = sessions.get(upload_id)
-    if not session:
+    s = sessions.get(upload_id)
+    if not s:
         return "", 404
-    file_path = os.path.join(session["folder"], filename)
+    file_path = os.path.join(s["folder"], filename)
     if not os.path.isfile(file_path):
         return "", 404
     return send_file(file_path, mimetype="image/jpeg")
@@ -159,16 +355,15 @@ def thumbnail(upload_id, filename):
 def run_pipeline(job_id: str, upload_id: str, selected_trip_ids: list, options: dict):
     """선택된 여행으로 영상 생성 파이프라인 실행."""
     job = jobs[job_id]
-    session = sessions.get(upload_id)
+    s = sessions.get(upload_id)
 
-    if not session or session["status"] != "ready":
+    if not s or s["status"] != "ready":
         job["status"] = "error"
-        job["message"] = "세션이 만료되었습니다. 다시 업로드해주세요."
+        job["message"] = "세션이 만료되었습니다. 다시 시도해주세요."
         return
 
     try:
-        all_groups = session["location_groups"]
-        # 선택된 여행 그룹만 필터
+        all_groups = s["location_groups"]
         selected_groups = [all_groups[i] for i in selected_trip_ids if i < len(all_groups)]
         if not selected_groups:
             job["status"] = "error"

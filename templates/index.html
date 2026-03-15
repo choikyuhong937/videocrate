@@ -13,6 +13,7 @@
             --accent: #7c6aef; --accent-l: #a594ff; --accent-bg: rgba(124,106,239,0.12);
             --green: #4ade80; --red: #f87171;
             --grad: linear-gradient(135deg, #7c6aef 0%, #c084fc 100%);
+            --google-blue: #4285f4; --google-hover: #357ae8;
             --safe-b: env(safe-area-inset-bottom, 0px);
         }
         * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -53,18 +54,25 @@
         .btn-row { display:flex; gap:10px; }
         .btn-row .btn { flex:1; }
 
-        /* ── Upload zone (mobile) ── */
-        .upload-zone { border:2px dashed var(--border); border-radius:12px; padding:36px 16px; text-align:center; cursor:pointer; transition:all 0.3s; }
-        .upload-zone:active { border-color:var(--accent); background:var(--accent-bg); }
-        .upload-zone.has-files { border-color:var(--green); border-style:solid; background:rgba(74,222,128,0.06); }
-        .upload-zone h3 { font-size:15px; font-weight:500; margin-bottom:4px; }
-        .upload-zone p { font-size:12px; color:var(--dim); }
-        .upload-icon { font-size:36px; margin-bottom:10px; }
-        .file-count { color:var(--green); font-weight:600; }
-        input[type="file"] { display:none; }
-        .preview-row { display:flex; gap:4px; margin-top:12px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:4px; }
-        .preview-row img { width:56px; height:56px; object-fit:cover; border-radius:6px; flex-shrink:0; }
-        .preview-more { width:56px; height:56px; border-radius:6px; background:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--dim); flex-shrink:0; }
+        /* ── Google 로그인 버튼 ── */
+        .google-btn {
+            width:100%; padding:16px 20px; background:#fff; border:none; border-radius:12px;
+            color:#333; font-size:16px; font-weight:600; cursor:pointer; transition:all 0.2s;
+            display:flex; align-items:center; justify-content:center; gap:12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        .google-btn:active { transform:scale(0.98); box-shadow:0 1px 4px rgba(0,0,0,0.2); }
+        .google-btn svg { width:20px; height:20px; flex-shrink:0; }
+        .google-btn:disabled { opacity:0.5; cursor:default; }
+
+        /* ── Date range picker ── */
+        .date-range { display:flex; gap:10px; margin-bottom:16px; }
+        .date-range .form-group { flex:1; margin-bottom:0; }
+        .date-range input[type="date"] {
+            width:100%; padding:12px; background:var(--surface2); border:1.5px solid var(--border);
+            border-radius:8px; color:var(--text); font-size:14px; outline:none;
+            color-scheme:dark;
+        }
 
         /* ── Trip cards (mobile) ── */
         .trip-card { display:flex; align-items:center; gap:12px; padding:14px; border-radius:12px; background:var(--surface2); border:2px solid transparent; cursor:pointer; transition:all 0.2s; user-select:none; margin-bottom:10px; }
@@ -89,7 +97,7 @@
         .spinner-lg { width:36px; height:36px; border-width:3px; margin:0 auto 14px; display:block; }
         @keyframes spin { to { transform:rotate(360deg) } }
         .loading-view { text-align:center; padding:40px 0; }
-        .loading-view p { color:var(--dim); font-size:13px; }
+        .loading-view p { color:var(--dim); font-size:13px; margin-top:8px; }
 
         /* ── Progress steps ── */
         .step { display:flex; align-items:center; gap:12px; padding:10px 0; }
@@ -115,7 +123,8 @@
         /* ── User bar ── */
         .user-bar { display:flex; align-items:center; justify-content:space-between; padding:10px 0; margin-bottom:8px; }
         .user-info { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--dim); min-width:0; }
-        .user-avatar { width:28px; height:28px; border-radius:50%; background:var(--accent-bg); display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; color:var(--accent-l); font-weight:600; }
+        .user-avatar { width:28px; height:28px; border-radius:50%; background:var(--accent-bg); display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; color:var(--accent-l); font-weight:600; overflow:hidden; }
+        .user-avatar img { width:100%; height:100%; object-fit:cover; }
         .user-email { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .logout-btn { background:none; border:none; color:var(--dim); font-size:12px; cursor:pointer; padding:6px 10px; border-radius:6px; }
         .logout-btn:active { background:var(--surface2); }
@@ -125,6 +134,23 @@
         .mt8 { margin-top:8px; }
         .mt16 { margin-top:16px; }
         .link { color:var(--accent-l); text-decoration:none; font-size:13px; }
+
+        /* ── Divider ── */
+        .divider { display:flex; align-items:center; gap:12px; margin:20px 0; color:var(--dim); font-size:12px; }
+        .divider::before, .divider::after { content:''; flex:1; height:1px; background:var(--border); }
+
+        /* ── Fetch progress ── */
+        .fetch-progress { text-align:center; padding:24px 0; }
+        .fetch-progress .emoji { font-size:48px; margin-bottom:16px; animation: bounce 1.5s ease infinite; }
+        @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+        .fetch-progress h3 { font-size:16px; font-weight:600; margin-bottom:8px; }
+        .fetch-progress p { font-size:13px; color:var(--dim); }
+
+        /* ── Select all ── */
+        .select-all-bar { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+        .select-all-btn { background:none; border:1px solid var(--border); color:var(--accent-l); font-size:12px; padding:6px 14px; border-radius:16px; cursor:pointer; }
+        .select-all-btn:active { background:var(--accent-bg); }
+        .trip-count { font-size:13px; color:var(--dim); }
     </style>
 </head>
 <body>
@@ -136,14 +162,10 @@
         <div class="brand">
             <div class="brand-icon">&#127796;</div>
             <h1>TripVideo</h1>
-            <p>여행 사진을 올리면<br>AI가 영상으로 만들어드려요</p>
+            <p>구글 포토의 여행 사진이<br>AI 영상으로 자동 변환됩니다</p>
         </div>
         <div style="height:32px"></div>
         <div class="card">
-            <div class="form-group">
-                <label class="form-label">Google 계정</label>
-                <input class="form-input" type="email" id="loginEmail" placeholder="example@gmail.com" inputmode="email" autocomplete="email">
-            </div>
             <div class="form-group">
                 <label class="form-label">Gemini API Key</label>
                 <div class="input-wrap">
@@ -152,23 +174,69 @@
                 </div>
                 <div class="form-hint"><a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>에서 무료 발급</div>
             </div>
-            <button class="btn" id="loginBtn" onclick="doLogin()">시작하기</button>
+
+            <button class="google-btn" id="googleLoginBtn" onclick="doGoogleLogin()">
+                <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                Google 계정으로 로그인
+            </button>
+
+            <div class="form-hint mt8 center-text" style="color:var(--dim)">
+                Google 포토에 자동으로 연결됩니다
+            </div>
         </div>
         <div class="spacer"></div>
     </div>
 
-    <!-- ===== 1. 업로드 ===== -->
-    <div id="uploadScreen" class="screen">
+    <!-- ===== 1. 포토 가져오기 (Google Photos 연동) ===== -->
+    <div id="fetchScreen" class="screen">
         <div class="user-bar" id="userBar"></div>
+
+        <div class="card">
+            <div class="section-title">어떤 기간의 사진을 가져올까요?</div>
+            <div class="date-range">
+                <div class="form-group">
+                    <label class="form-label">시작일</label>
+                    <input type="date" id="dateFrom">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">종료일</label>
+                    <input type="date" id="dateTo">
+                </div>
+            </div>
+            <button class="btn" id="fetchBtn" onclick="startFetch()">
+                구글 포토에서 가져오기
+            </button>
+        </div>
+
+        <!-- 가져오기 진행 중 -->
+        <div id="fetchingView" style="display:none">
+            <div class="fetch-progress">
+                <div class="emoji">&#128247;</div>
+                <div class="spinner spinner-lg"></div>
+                <h3 id="fetchMsg">구글 포토에 연결하고 있습니다...</h3>
+                <p>잠시만 기다려주세요</p>
+            </div>
+        </div>
+
+        <div class="error-msg" id="fetchError"></div>
+
+        <div class="divider">또는</div>
+        <button class="btn btn-outline btn-sm" onclick="showManualUpload()">직접 사진 업로드</button>
+    </div>
+
+    <!-- ===== 1-B. 수동 업로드 (fallback) ===== -->
+    <div id="uploadScreen" class="screen">
+        <div class="user-bar" id="userBar1b"></div>
         <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
             <div class="upload-icon">&#128247;</div>
             <h3>사진/영상 선택</h3>
             <p>탭하여 사진을 선택하세요</p>
             <div class="preview-row" id="previewRow"></div>
         </div>
-        <input type="file" id="fileInput" multiple accept="image/*,video/*">
+        <input type="file" id="fileInput" multiple accept="image/*,video/*" style="display:none">
         <div style="height:12px"></div>
         <button class="btn" id="uploadBtn" onclick="startUpload()" disabled>사진을 선택하세요</button>
+        <div class="mt8 center-text"><a href="javascript:showScreen('fetchScreen')" class="link">&#8592; 구글 포토로 돌아가기</a></div>
     </div>
 
     <!-- ===== 2. 여행 선택 ===== -->
@@ -183,7 +251,11 @@
 
         <!-- 여행 목록 -->
         <div id="tripsView" style="display:none">
-            <div class="section-title">어떤 여행을 영상으로 만들까요?</div>
+            <div class="select-all-bar">
+                <div class="section-title" style="margin-bottom:0">어떤 여행을 영상으로?</div>
+                <button class="select-all-btn" id="selectAllBtn" onclick="toggleSelectAll()">전체 선택</button>
+            </div>
+            <div class="trip-count" id="tripCount" style="margin-bottom:12px"></div>
             <div id="tripList"></div>
 
             <div class="settings">
@@ -243,11 +315,12 @@
 
 <script>
 // ── State ──
-let user = null; // {email, apiKey}
+let user = null;    // {email, name, picture, apiKey}
 let selectedFiles = [];
 let uploadId = null;
 let currentJobId = null;
 let selectedTrips = new Set();
+let allTrips = [];
 
 // ── Screen ──
 function showScreen(id) {
@@ -258,73 +331,186 @@ function showScreen(id) {
 
 function renderUserBar() {
     if (!user) return;
+    const avatarHtml = user.picture
+        ? `<div class="user-avatar"><img src="${user.picture}" alt=""></div>`
+        : `<div class="user-avatar">${(user.email||'U')[0].toUpperCase()}</div>`;
     const html = `
         <div class="user-info">
-            <div class="user-avatar">${user.email[0].toUpperCase()}</div>
-            <span class="user-email">${user.email}</span>
+            ${avatarHtml}
+            <span class="user-email">${user.name || user.email}</span>
         </div>
         <button class="logout-btn" onclick="doLogout()">로그아웃</button>`;
-    ['userBar','userBar2','userBar3','userBar4'].forEach(id => {
+    ['userBar','userBar1b','userBar2','userBar3','userBar4'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = html;
     });
 }
 
-// ── Login ──
-function doLogin() {
-    const email = document.getElementById('loginEmail').value.trim();
+// ── Google Login ──
+function doGoogleLogin() {
     const apiKey = document.getElementById('loginApiKey').value.trim();
-    if (!email || !email.includes('@')) { alert('이메일을 입력해주세요.'); return; }
-    if (!apiKey) { alert('Gemini API 키를 입력해주세요.'); return; }
+    if (!apiKey) { alert('Gemini API Key를 먼저 입력해주세요.'); return; }
 
-    user = { email, apiKey };
-    localStorage.setItem('tv_user', JSON.stringify(user));
-    renderUserBar();
-    showScreen('uploadScreen');
+    // API key를 localStorage에 저장
+    localStorage.setItem('tv_api_key', apiKey);
+
+    // Google OAuth 시작 - API key를 state로 전달
+    window.location.href = `/auth/google?api_key=${encodeURIComponent(apiKey)}`;
 }
 
 function doLogout() {
     user = null;
     localStorage.removeItem('tv_user');
-    showScreen('loginScreen');
+    window.location.href = '/auth/logout';
 }
 
 function goHome() {
-    selectedFiles = []; uploadId = null; currentJobId = null; selectedTrips.clear();
-    // Reset upload zone
-    const uz = document.getElementById('uploadZone');
-    uz.querySelector('.upload-icon').textContent = '\u{1F4F7}';
-    uz.querySelector('h3').textContent = '사진/영상 선택';
-    uz.querySelector('p').textContent = '탭하여 사진을 선택하세요';
-    uz.classList.remove('has-files');
-    document.getElementById('previewRow').innerHTML = '';
-    document.getElementById('uploadBtn').disabled = true;
-    document.getElementById('uploadBtn').textContent = '사진을 선택하세요';
-    showScreen('uploadScreen');
+    selectedFiles = []; uploadId = null; currentJobId = null;
+    selectedTrips.clear(); allTrips = [];
+    showScreen('fetchScreen');
+    // Reset fetch view
+    document.getElementById('fetchingView').style.display = 'none';
+    document.getElementById('fetchBtn').disabled = false;
+    document.getElementById('fetchBtn').textContent = '구글 포토에서 가져오기';
+    hideErr('fetchError');
 }
 
-// Auto-login
-(function() {
-    const saved = localStorage.getItem('tv_user');
-    if (saved) { user = JSON.parse(saved); renderUserBar(); showScreen('uploadScreen'); }
-})();
+// ── Init: Check login state ──
+async function checkLogin() {
+    // URL 파라미터 확인
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.get('error')) {
+        alert('Google 로그인 실패: ' + params.get('error'));
+        history.replaceState({}, '', '/tripvideo');
+        return;
+    }
+
+    // API key 복원
+    if (params.get('api_key')) {
+        localStorage.setItem('tv_api_key', params.get('api_key'));
+    }
+
+    // 서버에서 로그인 상태 확인
+    try {
+        const resp = await fetch('/api/user');
+        const data = await resp.json();
+
+        if (data.logged_in) {
+            user = {
+                email: data.email,
+                name: data.name,
+                picture: data.picture,
+                apiKey: localStorage.getItem('tv_api_key') || '',
+            };
+            localStorage.setItem('tv_user', JSON.stringify(user));
+            renderUserBar();
+
+            // 기본 날짜 설정 (최근 6개월)
+            const now = new Date();
+            const sixMonthsAgo = new Date(now);
+            sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+            document.getElementById('dateTo').value = now.toISOString().slice(0, 10);
+            document.getElementById('dateFrom').value = sixMonthsAgo.toISOString().slice(0, 10);
+
+            showScreen('fetchScreen');
+            history.replaceState({}, '', '/tripvideo');
+            return;
+        }
+    } catch(e) {
+        console.log('Login check failed:', e);
+    }
+
+    // 로컬 저장 API key 복원
+    const savedKey = localStorage.getItem('tv_api_key');
+    if (savedKey) {
+        document.getElementById('loginApiKey').value = savedKey;
+    }
+
+    showScreen('loginScreen');
+}
+
+checkLogin();
 
 // ── PW Toggle ──
 function togglePw(id) { const i = document.getElementById(id); i.type = i.type === 'password' ? 'text' : 'password'; }
 
-// ── File select ──
-const uploadZone = document.getElementById('uploadZone');
+// ── Google Photos Fetch ──
+async function startFetch() {
+    const btn = document.getElementById('fetchBtn');
+    btn.disabled = true;
+    btn.textContent = '연결 중...';
+
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+
+    document.getElementById('fetchingView').style.display = '';
+    hideErr('fetchError');
+
+    try {
+        const r = await fetch('/api/google-photos/fetch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ date_from: dateFrom, date_to: dateTo }),
+        });
+        const d = await r.json();
+
+        if (d.error) {
+            showErr('fetchError', d.error);
+            btn.disabled = false;
+            btn.textContent = '구글 포토에서 가져오기';
+            document.getElementById('fetchingView').style.display = 'none';
+            return;
+        }
+
+        uploadId = d.upload_id;
+        pollFetch();
+    } catch(e) {
+        showErr('fetchError', '연결 실패. 다시 시도해주세요.');
+        btn.disabled = false;
+        btn.textContent = '구글 포토에서 가져오기';
+        document.getElementById('fetchingView').style.display = 'none';
+    }
+}
+
+async function pollFetch() {
+    try {
+        const d = (await (await fetch(`/api/analyze/${uploadId}`)).json());
+        document.getElementById('fetchMsg').textContent = d.message;
+
+        if (d.status === 'ready') {
+            showScreen('tripScreen');
+            document.getElementById('analyzingView').style.display = 'none';
+            renderTrips(d.trips);
+            return;
+        }
+        if (d.status === 'error') {
+            showErr('fetchError', d.message);
+            document.getElementById('fetchingView').style.display = 'none';
+            document.getElementById('fetchBtn').disabled = false;
+            document.getElementById('fetchBtn').textContent = '구글 포토에서 가져오기';
+            return;
+        }
+        setTimeout(pollFetch, 1000);
+    } catch(e) { setTimeout(pollFetch, 2000); }
+}
+
+// ── Manual Upload (fallback) ──
+function showManualUpload() {
+    showScreen('uploadScreen');
+}
+
 const fileInput = document.getElementById('fileInput');
 fileInput.addEventListener('change', e => handleFiles(e.target.files));
 
 function handleFiles(files) {
     selectedFiles = Array.from(files);
     if (!selectedFiles.length) return;
-
-    uploadZone.classList.add('has-files');
-    uploadZone.querySelector('.upload-icon').textContent = '';
-    uploadZone.querySelector('h3').innerHTML = `<span class="file-count">${selectedFiles.length}개</span> 파일 선택됨`;
-    uploadZone.querySelector('p').textContent = '탭하여 다시 선택';
+    const uz = document.getElementById('uploadZone');
+    uz.classList.add('has-files');
+    uz.querySelector('.upload-icon').textContent = '';
+    uz.querySelector('h3').innerHTML = `<span class="file-count">${selectedFiles.length}개</span> 파일 선택됨`;
+    uz.querySelector('p').textContent = '탭하여 다시 선택';
 
     const row = document.getElementById('previewRow');
     row.innerHTML = '';
@@ -334,10 +520,9 @@ function handleFiles(files) {
     if (remain > 0) { const d = document.createElement('div'); d.className='preview-more'; d.textContent=`+${remain}`; row.appendChild(d); }
 
     document.getElementById('uploadBtn').disabled = false;
-    document.getElementById('uploadBtn').textContent = `분석 시작`;
+    document.getElementById('uploadBtn').textContent = '분석 시작';
 }
 
-// ── Upload ──
 async function startUpload() {
     const btn = document.getElementById('uploadBtn');
     btn.disabled = true; btn.textContent = '업로드 중...';
@@ -367,19 +552,24 @@ async function pollAnalyze() {
     } catch(e) { setTimeout(pollAnalyze, 1500); }
 }
 
+// ── Trip Cards ──
 function renderTrips(trips) {
+    allTrips = trips;
     document.getElementById('analyzingView').style.display = 'none';
     document.getElementById('tripsView').style.display = '';
     const list = document.getElementById('tripList');
     list.innerHTML = '';
     selectedTrips.clear();
 
+    document.getElementById('tripCount').textContent = `${trips.length}개 장소 발견`;
+
     trips.forEach(t => {
         const card = document.createElement('div');
         card.className = 'trip-card';
+        card.id = `trip-${t.id}`;
         card.onclick = () => { toggleTrip(t.id, card); };
         const thumbHtml = t.thumbnail
-            ? `<img class="trip-thumb" src="/api/thumbnail/${uploadId}/${t.thumbnail}" alt="">`
+            ? `<img class="trip-thumb" src="/api/thumbnail/${uploadId}/${t.thumbnail}" alt="" onerror="this.outerHTML='<div class=\\'trip-thumb-empty\\'>&#127758;</div>'">`
             : `<div class="trip-thumb-empty">&#127758;</div>`;
         card.innerHTML = `${thumbHtml}
             <div class="trip-info">
@@ -389,11 +579,36 @@ function renderTrips(trips) {
             <div class="trip-check">&#10003;</div>`;
         list.appendChild(card);
     });
+
+    updateGenerateBtn();
 }
 
 function toggleTrip(id, card) {
     if (selectedTrips.has(id)) { selectedTrips.delete(id); card.classList.remove('selected'); }
     else { selectedTrips.add(id); card.classList.add('selected'); }
+    updateGenerateBtn();
+}
+
+function toggleSelectAll() {
+    const btn = document.getElementById('selectAllBtn');
+    if (selectedTrips.size === allTrips.length) {
+        // 전체 해제
+        selectedTrips.clear();
+        document.querySelectorAll('.trip-card').forEach(c => c.classList.remove('selected'));
+        btn.textContent = '전체 선택';
+    } else {
+        // 전체 선택
+        allTrips.forEach(t => {
+            selectedTrips.add(t.id);
+            const card = document.getElementById(`trip-${t.id}`);
+            if (card) card.classList.add('selected');
+        });
+        btn.textContent = '전체 해제';
+    }
+    updateGenerateBtn();
+}
+
+function updateGenerateBtn() {
     const btn = document.getElementById('generateBtn');
     btn.disabled = selectedTrips.size === 0;
     btn.textContent = selectedTrips.size > 0 ? `${selectedTrips.size}개 여행 영상 만들기` : '여행을 선택하세요';
@@ -403,6 +618,7 @@ function toggleTrip(id, card) {
 async function startGeneration() {
     const btn = document.getElementById('generateBtn');
     btn.disabled=true; btn.textContent='시작 중...';
+    const apiKey = user ? user.apiKey : (localStorage.getItem('tv_api_key') || '');
     try {
         const r = await fetch('/api/generate', {
             method:'POST', headers:{'Content-Type':'application/json'},
@@ -412,14 +628,13 @@ async function startGeneration() {
                 max_per_group: +document.getElementById('maxPerGroup').value,
                 duration: +document.getElementById('duration').value,
                 lang: document.getElementById('lang').value,
-                api_key: user ? user.apiKey : '',
+                api_key: apiKey,
             })
         });
         const d = await r.json();
         if (d.error) { alert(d.error); btn.disabled=false; btn.textContent=`${selectedTrips.size}개 여행 영상 만들기`; return; }
         currentJobId = d.job_id;
         showScreen('progressScreen');
-        // reset steps
         for(let i=1;i<=3;i++){const s=document.getElementById(`pStep${i}`);s.className='step pending';s.querySelector('.step-dot').textContent=i;}
         pollProgress();
     } catch(e) { alert('요청 실패'); btn.disabled=false; }
@@ -453,6 +668,7 @@ function showResult(job) {
 
 function downloadFile(t) { if(currentJobId) window.location.href=`/api/download/${currentJobId}/${t}`; }
 function showErr(id,msg) { const e=document.getElementById(id); e.textContent=msg; e.classList.add('show'); }
+function hideErr(id) { const e=document.getElementById(id); e.textContent=''; e.classList.remove('show'); }
 </script>
 </body>
 </html>
