@@ -37,7 +37,8 @@ def generate_subtitles(
         [{start_time, end_time, text, style}] 자막 리스트
     """
     key = api_key or config.GEMINI_API_KEY
-    client = genai.Client(api_key=key)
+    has_ai = bool(key)
+    client = genai.Client(api_key=key) if has_ai else None
 
     # 선별된 미디어가 어떤 그룹에 속하는지 매핑
     file_to_group = {}
@@ -81,8 +82,12 @@ def generate_subtitles(
             current_time += photo_duration  # 영상도 기본 duration 적용
 
     # Gemini로 감성 자막 일괄 생성
-    if image_batch:
+    if image_batch and has_ai:
         print(f"[subtitles] {len(image_batch)}장에 대한 감성 자막 생성 중...")
+    elif image_batch:
+        print("[subtitles] API 키 없음 - 감성 자막 생략, 장소 타이틀만 생성")
+
+    if image_batch and has_ai:
 
         # 배치 크기 제한 (한번에 최대 10장)
         batch_size = 10

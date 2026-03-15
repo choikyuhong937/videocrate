@@ -41,8 +41,12 @@ def select_best_photos(
         선별된 미디어 정보 리스트 (순서 유지)
     """
     key = api_key or config.GEMINI_API_KEY
-    client = genai.Client(api_key=key)
+    has_ai = bool(key)
+    client = genai.Client(api_key=key) if has_ai else None
     selected_all = []
+
+    if not has_ai:
+        print("[selector] API 키 없음 - AI 선별 생략, 최신 사진 우선 선택")
 
     for group in location_groups:
         images = [f for f in group["files"] if f["type"] == "image"]
@@ -56,6 +60,10 @@ def select_best_photos(
 
         if len(images) <= max_per_group:
             selected_all.extend(images)
+            continue
+
+        if not has_ai:
+            selected_all.extend(images[:max_per_group])
             continue
 
         # Gemini에게 사진 품질 평가 요청
