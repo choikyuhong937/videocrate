@@ -423,6 +423,28 @@
             </div>
             <input type="file" id="fileInput" multiple accept="image/*,video/*">
 
+            <!-- API Key -->
+            <div class="api-key-section" style="margin-bottom: 20px;">
+                <div class="field">
+                    <label style="display:flex; align-items:center; gap:6px;">
+                        Gemini API Key
+                        <span style="font-weight:400; color:var(--text-dim);">
+                            (<a href="https://aistudio.google.com/apikey" target="_blank"
+                                style="color:var(--accent-light); text-decoration:none;">발급받기</a>)
+                        </span>
+                    </label>
+                    <div style="position:relative;">
+                        <input type="password" id="apiKey" placeholder="AIzaSy..."
+                            style="padding-right:40px;"
+                            oninput="onApiKeyChange()">
+                        <button onclick="toggleApiKeyVisibility()"
+                            style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px;padding:4px;"
+                            id="apiKeyToggle" title="보기/숨기기">&#128065;</button>
+                    </div>
+                    <div id="apiKeyStatus" style="margin-top:6px;font-size:12px;"></div>
+                </div>
+            </div>
+
             <div class="settings">
                 <div class="field">
                     <label>최대 사진 수</label>
@@ -613,6 +635,7 @@
             formData.append('max_per_group', document.getElementById('maxPerGroup').value);
             formData.append('duration', document.getElementById('duration').value);
             formData.append('lang', document.getElementById('lang').value);
+            formData.append('api_key', document.getElementById('apiKey').value.trim());
 
             try {
                 const res = await fetch('/api/upload', { method: 'POST', body: formData });
@@ -715,6 +738,49 @@
             if (job.total_groups) badges.push(`<div class="info-badge">장소 <span>${job.total_groups}곳</span></div>`);
             info.innerHTML = badges.join('');
         }
+
+        // API Key 관련
+        function toggleApiKeyVisibility() {
+            const input = document.getElementById('apiKey');
+            const btn = document.getElementById('apiKeyToggle');
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.innerHTML = '&#128064;';
+            } else {
+                input.type = 'password';
+                btn.innerHTML = '&#128065;';
+            }
+        }
+
+        function onApiKeyChange() {
+            const key = document.getElementById('apiKey').value.trim();
+            const statusEl = document.getElementById('apiKeyStatus');
+            if (key && key.startsWith('AIza')) {
+                statusEl.innerHTML = '<span style="color:var(--success);">API 키가 입력되었습니다</span>';
+                localStorage.setItem('videocrate_api_key', key);
+            } else if (key) {
+                statusEl.innerHTML = '<span style="color:var(--error);">올바른 Gemini API 키를 입력하세요 (AIza...)</span>';
+            } else {
+                statusEl.innerHTML = '<span style="color:var(--text-dim);">API 키 없이도 영상은 생성되지만, AI 선별/자막이 비활성화됩니다</span>';
+            }
+            updateGenerateBtn();
+        }
+
+        function updateGenerateBtn() {
+            if (selectedFiles.length > 0) {
+                generateBtn.disabled = false;
+                generateBtn.textContent = `영상 만들기 (${selectedFiles.length}개 파일)`;
+            }
+        }
+
+        // 페이지 로드 시 저장된 API 키 복원
+        (function loadSavedApiKey() {
+            const saved = localStorage.getItem('videocrate_api_key');
+            if (saved) {
+                document.getElementById('apiKey').value = saved;
+                onApiKeyChange();
+            }
+        })();
 
         function downloadFile(type) {
             if (!currentJobId) return;

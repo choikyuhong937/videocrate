@@ -26,6 +26,7 @@ def generate_subtitles(
     location_groups: list[dict],
     photo_duration: int = 4,
     lang: str = "ko",
+    api_key: str = None,
 ) -> list[dict]:
     """선별된 미디어에 대해 Gemini로 자막을 생성한다.
 
@@ -35,7 +36,8 @@ def generate_subtitles(
     Returns:
         [{start_time, end_time, text, style}] 자막 리스트
     """
-    client = genai.Client(api_key=config.GEMINI_API_KEY)
+    key = api_key or config.GEMINI_API_KEY
+    client = genai.Client(api_key=key)
 
     # 선별된 미디어가 어떤 그룹에 속하는지 매핑
     file_to_group = {}

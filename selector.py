@@ -27,6 +27,7 @@ def select_best_photos(
     location_groups: list[dict],
     max_per_group: int = 5,
     max_total: int = 30,
+    api_key: str = None,
 ) -> list[dict]:
     """각 장소 그룹에서 Gemini AI로 베스트 사진을 선별한다.
 
@@ -34,11 +35,13 @@ def select_best_photos(
         location_groups: group_by_location() 결과
         max_per_group: 그룹당 최대 선택 수
         max_total: 전체 최대 선택 수
+        api_key: Gemini API 키 (없으면 config에서 로드)
 
     Returns:
         선별된 미디어 정보 리스트 (순서 유지)
     """
-    client = genai.Client(api_key=config.GEMINI_API_KEY)
+    key = api_key or config.GEMINI_API_KEY
+    client = genai.Client(api_key=key)
     selected_all = []
 
     for group in location_groups:

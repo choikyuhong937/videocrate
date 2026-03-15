@@ -60,7 +60,8 @@ def run_pipeline(job_id: str, folder_path: str, options: dict):
         job["message"] = "AI가 베스트 사진을 고르고 있습니다..."
         max_per_group = options.get("max_per_group", 5)
         max_photos = options.get("max_photos", 30)
-        selected = select_best_photos(location_groups, max_per_group=max_per_group, max_total=max_photos)
+        api_key = options.get("api_key")
+        selected = select_best_photos(location_groups, max_per_group=max_per_group, max_total=max_photos, api_key=api_key)
         if not selected:
             job["status"] = "error"
             job["message"] = "선별된 사진이 없습니다."
@@ -72,7 +73,7 @@ def run_pipeline(job_id: str, folder_path: str, options: dict):
         job["message"] = "AI가 감성 자막을 만들고 있습니다..."
         duration = options.get("duration", config.DEFAULT_PHOTO_DURATION)
         lang = options.get("lang", config.DEFAULT_LANG)
-        subtitles = generate_subtitles(selected, location_groups, photo_duration=duration, lang=lang)
+        subtitles = generate_subtitles(selected, location_groups, photo_duration=duration, lang=lang, api_key=api_key)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         srt_path = os.path.join(OUTPUT_DIR, f"subtitles_{job_id}.srt")
@@ -124,6 +125,7 @@ def upload():
         "max_per_group": int(request.form.get("max_per_group", 5)),
         "duration": int(request.form.get("duration", 4)),
         "lang": request.form.get("lang", "ko"),
+        "api_key": request.form.get("api_key", "").strip() or None,
     }
 
     # 파일 저장
