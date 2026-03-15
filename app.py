@@ -54,9 +54,14 @@ def auth_google():
     if not client_id:
         return jsonify({"error": "GOOGLE_CLIENT_ID가 설정되지 않았습니다."}), 500
 
-    # state에 API key를 포함 (콜백 후 복원용)
+    # API key를 세션에 임시 저장 (OAuth 콜백 후 복원용)
     api_key = request.args.get("api_key", "")
-    state = api_key
+    if api_key:
+        session["pending_api_key"] = api_key
+
+    # state는 CSRF 방지용 랜덤 토큰
+    state = str(uuid.uuid4())[:8]
+    session["oauth_state"] = state
 
     redirect_uri = _get_redirect_uri()
     auth_url = get_auth_url(client_id, redirect_uri, state=state)
@@ -68,13 +73,18 @@ def auth_callback():
     """Google OAuth 콜백 - 토큰 교환 후 메인 페이지로."""
     code = request.args.get("code")
     error = request.args.get("error")
-    state = request.args.get("state", "")  # api_key
+    state = request.args.get("state", "")
 
     if error:
         return redirect(f"/tripvideo?error={error}")
 
     if not code:
         return redirect("/tripvideo?error=no_code")
+
+    # CSRF 검증
+    expected_state = session.pop("oauth_state", "")
+    if state != expected_state:
+        return redirect("/tripvideo?error=invalid_state")
 
     try:
         redirect_uri = _get_redirect_uri()
@@ -97,8 +107,7 @@ def auth_callback():
             "picture": user_info.get("picture", ""),
         }
 
-        # API key를 쿼리 파라미터로 전달
-        return redirect(f"/tripvideo?logged_in=1&api_key={state}")
+        return redirect("/tripvideo?logged_in=1")
 
     except Exception as e:
         print(f"[auth] OAuth 에러: {e}")

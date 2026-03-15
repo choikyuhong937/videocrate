@@ -386,11 +386,6 @@ async function checkLogin() {
         return;
     }
 
-    // API key 복원
-    if (params.get('api_key')) {
-        localStorage.setItem('tv_api_key', params.get('api_key'));
-    }
-
     // 서버에서 로그인 상태 확인
     try {
         const resp = await fetch('/api/user');
