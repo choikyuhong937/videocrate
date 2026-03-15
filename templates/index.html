@@ -137,6 +137,21 @@
         .fetch-progress h3 { font-size:16px; font-weight:600; margin-bottom:8px; }
         .fetch-progress p { font-size:13px; color:var(--dim); }
 
+        /* ── Upload method ── */
+        .upload-method-title { font-size:15px; font-weight:600; margin-bottom:6px; }
+        .upload-method-desc { font-size:12px; color:var(--dim); margin-bottom:14px; line-height:1.5; }
+        .upload-drop-zone {
+            border:2px dashed var(--border); border-radius:12px; padding:24px 16px;
+            text-align:center; cursor:pointer; transition:all 0.2s; min-height:100px;
+            display:flex; align-items:center; justify-content:center;
+        }
+        .upload-drop-zone:active { border-color:var(--accent); background:var(--accent-bg); }
+        .upload-drop-zone.has-files { border-style:solid; border-color:var(--accent); padding:12px; }
+        .preview-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; width:100%; }
+        .preview-grid img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:6px; background:var(--surface2); }
+        .preview-grid .preview-more-cell { width:100%; aspect-ratio:1; border-radius:6px; background:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:13px; color:var(--dim); font-weight:500; }
+        .preview-count { text-align:center; margin-top:8px; font-size:13px; color:var(--accent-l); font-weight:500; }
+
         /* ── Select all ── */
         .select-all-bar { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
         .select-all-btn { background:none; border:1px solid var(--border); color:var(--accent-l); font-size:12px; padding:6px 14px; border-radius:16px; cursor:pointer; }
@@ -178,18 +193,45 @@
         <div class="spacer"></div>
     </div>
 
-    <!-- ===== 1. 포토 가져오기 (Google Photos Picker) ===== -->
+    <!-- ===== 1. 사진 가져오기 (통합 화면) ===== -->
     <div id="fetchScreen" class="screen">
         <div class="user-bar" id="userBar"></div>
 
+        <div class="section-title">사진을 가져오세요</div>
+
+        <!-- 방법 1: 직접 업로드 (메인) -->
         <div class="card">
-            <div class="section-title">구글 포토에서 사진을 선택하세요</div>
-            <p style="font-size:13px; color:var(--dim); margin-bottom:16px; line-height:1.5;">
-                버튼을 누르면 Google 포토가 열립니다.<br>
-                영상에 사용할 사진을 직접 골라주세요.
+            <div class="upload-method-title">사진 직접 올리기</div>
+            <p class="upload-method-desc">
+                구글 포토 앱에서 날짜/인물/장소로 검색 후<br>
+                사진을 저장해서 올리면 가장 빠릅니다
             </p>
-            <button class="btn" id="fetchBtn" onclick="startPicker()">
-                구글 포토에서 사진 선택
+            <div class="upload-drop-zone" id="uploadZone">
+                <input type="file" id="fileInput" multiple accept="image/*,video/*" style="display:none">
+                <div id="uploadPlaceholder">
+                    <div style="font-size:36px; margin-bottom:8px;">&#128206;</div>
+                    <div style="font-size:14px; font-weight:500;">탭하여 사진 선택</div>
+                    <div style="font-size:12px; color:var(--dim); margin-top:4px;">여러 장 한번에 선택 가능</div>
+                </div>
+                <div id="uploadPreview" style="display:none">
+                    <div class="preview-grid" id="previewGrid"></div>
+                    <div class="preview-count" id="previewCount"></div>
+                </div>
+            </div>
+            <div style="height:12px"></div>
+            <button class="btn" id="uploadBtn" onclick="startUpload()" disabled>사진을 선택하세요</button>
+        </div>
+
+        <div class="divider">또는</div>
+
+        <!-- 방법 2: Picker -->
+        <div class="card">
+            <div class="upload-method-title">Google 포토에서 직접 선택</div>
+            <p class="upload-method-desc">
+                Google 포토 화면이 열리고 사진을 골라주세요
+            </p>
+            <button class="btn btn-outline" id="fetchBtn" onclick="startPicker()">
+                Google 포토 열기
             </button>
         </div>
 
@@ -208,30 +250,12 @@
             <div class="fetch-progress">
                 <div class="emoji">&#128230;</div>
                 <div class="spinner spinner-lg"></div>
-                <h3 id="fetchMsg">사진을 다운로드하고 있습니다...</h3>
+                <h3 id="fetchMsg">사진을 처리하고 있습니다...</h3>
                 <p>잠시만 기다려주세요</p>
             </div>
         </div>
 
         <div class="error-msg" id="fetchError"></div>
-
-        <div class="divider">또는</div>
-        <button class="btn btn-outline btn-sm" onclick="showManualUpload()">직접 사진 업로드</button>
-    </div>
-
-    <!-- ===== 1-B. 수동 업로드 (fallback) ===== -->
-    <div id="uploadScreen" class="screen">
-        <div class="user-bar" id="userBar1b"></div>
-        <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
-            <div class="upload-icon">&#128247;</div>
-            <h3>사진/영상 선택</h3>
-            <p>탭하여 사진을 선택하세요</p>
-            <div class="preview-row" id="previewRow"></div>
-        </div>
-        <input type="file" id="fileInput" multiple accept="image/*,video/*" style="display:none">
-        <div style="height:12px"></div>
-        <button class="btn" id="uploadBtn" onclick="startUpload()" disabled>사진을 선택하세요</button>
-        <div class="mt8 center-text"><a href="javascript:showScreen('fetchScreen')" class="link">&#8592; 구글 포토로 돌아가기</a></div>
     </div>
 
     <!-- ===== 2. 여행 선택 ===== -->
@@ -335,7 +359,7 @@ function renderUserBar() {
             <span class="user-email">${user.name || user.email}</span>
         </div>
         <button class="logout-btn" onclick="doLogout()">로그아웃</button>`;
-    ['userBar','userBar1b','userBar2','userBar3','userBar4'].forEach(id => {
+    ['userBar','userBar2','userBar3','userBar4'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = html;
     });
@@ -365,11 +389,17 @@ function goHome() {
     pickerSessionId = null; pickerWindow = null;
     if (pickerPollTimer) { clearTimeout(pickerPollTimer); pickerPollTimer = null; }
     showScreen('fetchScreen');
-    // Reset fetch view
+    // Reset views
     document.getElementById('fetchingView').style.display = 'none';
     document.getElementById('pickerWaitView').style.display = 'none';
     resetPickerUI();
     hideErr('fetchError');
+    // Reset upload zone
+    document.getElementById('uploadZone').classList.remove('has-files');
+    document.getElementById('uploadPlaceholder').style.display = '';
+    document.getElementById('uploadPreview').style.display = 'none';
+    document.getElementById('uploadBtn').disabled = true;
+    document.getElementById('uploadBtn').textContent = '사진을 선택하세요';
 }
 
 // ── Init: Check login state ──
@@ -571,32 +601,52 @@ async function pollFetch() {
     } catch(e) { setTimeout(pollFetch, 2000); }
 }
 
-// ── Manual Upload (fallback) ──
-function showManualUpload() {
-    showScreen('uploadScreen');
-}
-
+// ── Upload (직접 업로드) ──
+const uploadZone = document.getElementById('uploadZone');
 const fileInput = document.getElementById('fileInput');
+
+uploadZone.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+// 드래그 앤 드롭
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor = 'var(--accent)'; uploadZone.style.background = 'var(--accent-bg)'; });
+uploadZone.addEventListener('dragleave', e => { e.preventDefault(); uploadZone.style.borderColor = ''; uploadZone.style.background = ''; });
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.style.borderColor = ''; uploadZone.style.background = ''; if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; handleFiles(e.dataTransfer.files); } });
 
 function handleFiles(files) {
     selectedFiles = Array.from(files);
     if (!selectedFiles.length) return;
+
     const uz = document.getElementById('uploadZone');
     uz.classList.add('has-files');
-    uz.querySelector('.upload-icon').textContent = '';
-    uz.querySelector('h3').innerHTML = `<span class="file-count">${selectedFiles.length}개</span> 파일 선택됨`;
-    uz.querySelector('p').textContent = '탭하여 다시 선택';
 
-    const row = document.getElementById('previewRow');
-    row.innerHTML = '';
-    const imgs = selectedFiles.filter(f => f.type.startsWith('image/')).slice(0, 6);
-    imgs.forEach(f => { const img = document.createElement('img'); img.src = URL.createObjectURL(f); row.appendChild(img); });
-    const remain = selectedFiles.filter(f => f.type.startsWith('image/')).length - 6;
-    if (remain > 0) { const d = document.createElement('div'); d.className='preview-more'; d.textContent=`+${remain}`; row.appendChild(d); }
+    document.getElementById('uploadPlaceholder').style.display = 'none';
+    const preview = document.getElementById('uploadPreview');
+    preview.style.display = '';
+
+    const grid = document.getElementById('previewGrid');
+    grid.innerHTML = '';
+
+    const maxShow = 8;
+    const imgs = selectedFiles.filter(f => f.type.startsWith('image/')).slice(0, maxShow);
+    imgs.forEach(f => { const img = document.createElement('img'); img.src = URL.createObjectURL(f); grid.appendChild(img); });
+
+    const totalImages = selectedFiles.filter(f => f.type.startsWith('image/')).length;
+    const totalVideos = selectedFiles.filter(f => f.type.startsWith('video/')).length;
+    if (totalImages > maxShow) {
+        const more = document.createElement('div');
+        more.className = 'preview-more-cell';
+        more.textContent = `+${totalImages - maxShow}`;
+        grid.appendChild(more);
+    }
+
+    let countText = `${totalImages}장`;
+    if (totalVideos > 0) countText += ` + ${totalVideos}영상`;
+    countText += ' 선택됨 (탭하여 변경)';
+    document.getElementById('previewCount').textContent = countText;
 
     document.getElementById('uploadBtn').disabled = false;
-    document.getElementById('uploadBtn').textContent = '분석 시작';
+    document.getElementById('uploadBtn').textContent = `${selectedFiles.length}개 사진으로 영상 만들기`;
 }
 
 async function startUpload() {
@@ -609,13 +659,13 @@ async function startUpload() {
     try {
         const r = await fetch('/api/upload', { method:'POST', body:fd });
         const d = await r.json();
-        if (d.error) { alert(d.error); btn.disabled=false; btn.textContent='분석 시작'; return; }
+        if (d.error) { alert(d.error); btn.disabled=false; btn.textContent=`${selectedFiles.length}개 사진으로 영상 만들기`; return; }
         uploadId = d.upload_id;
         showScreen('tripScreen');
         document.getElementById('analyzingView').style.display = '';
         document.getElementById('tripsView').style.display = 'none';
         pollAnalyze();
-    } catch(e) { alert('업로드 실패'); btn.disabled=false; btn.textContent='분석 시작'; }
+    } catch(e) { alert('업로드 실패'); btn.disabled=false; btn.textContent=`${selectedFiles.length}개 사진으로 영상 만들기`; }
 }
 
 async function pollAnalyze() {
