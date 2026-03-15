@@ -19,6 +19,7 @@ from metadata import enrich_media_with_metadata, group_by_location
 from selector import select_best_photos
 from subtitles import generate_subtitles, write_srt
 from video import generate_video
+from categorizer import categorize_photos
 from google_photos import (
     get_auth_url, exchange_code, get_user_info,
     download_media, refresh_access_token,
@@ -202,36 +203,25 @@ def fetch_picker_photos(upload_id, access_token, picker_session_id):
         sess["folder"] = download_dir
         sess["uploaded_count"] = len(media_files)
 
-        # 3단계: EXIF 분석 + 여행 분류
+        # 3단계: EXIF 분석 + 위치 그룹핑
         sess["status"] = "analyzing"
-        sess["message"] = "GPS/날짜 정보를 분석하고 여행을 분류하고 있습니다..."
+        sess["message"] = "GPS/날짜 정보를 분석하고 있습니다..."
 
         media_files = enrich_media_with_metadata(media_files)
         location_groups = group_by_location(media_files)
 
-        # 여행 카드 데이터 구성
-        trips = []
-        for i, group in enumerate(location_groups):
-            image_files = [f for f in group["files"] if f["type"] == "image"]
-            video_files = [f for f in group["files"] if f["type"] == "video"]
+        # 4단계: AI 테마 분류
+        sess["status"] = "categorizing"
+        sess["message"] = "AI가 사진을 테마별로 분류하고 있습니다..."
 
-            thumbnail = image_files[0]["filename"] if image_files else None
-
-            trips.append({
-                "id": i,
-                "location": group["location_name"],
-                "date_range": group.get("date_range", ""),
-                "photo_count": len(image_files),
-                "video_count": len(video_files),
-                "total_count": len(group["files"]),
-                "thumbnail": thumbnail,
-            })
+        api_key = session.get("pending_api_key") or config.GEMINI_API_KEY
+        theme_cards = categorize_photos(media_files, location_groups, api_key=api_key)
 
         sess["status"] = "ready"
-        sess["message"] = "여행 분류 완료!"
+        sess["message"] = "테마 분류 완료!"
         sess["media_files"] = media_files
         sess["location_groups"] = location_groups
-        sess["trips"] = trips
+        sess["theme_cards"] = theme_cards
 
         # Picker 세션 정리
         delete_picker_session(access_token, picker_session_id)
@@ -288,31 +278,20 @@ def analyze_uploads(upload_id: str, folder_path: str):
             return
 
         s["status"] = "analyzing"
-        s["message"] = "GPS/날짜 정보를 분석하고 여행을 분류하고 있습니다..."
+        s["message"] = "GPS/날짜 정보를 분석하고 있습니다..."
         media_files = enrich_media_with_metadata(media_files)
         location_groups = group_by_location(media_files)
 
-        trips = []
-        for i, group in enumerate(location_groups):
-            image_files = [f for f in group["files"] if f["type"] == "image"]
-            video_files = [f for f in group["files"] if f["type"] == "video"]
-            thumbnail = image_files[0]["filename"] if image_files else None
-
-            trips.append({
-                "id": i,
-                "location": group["location_name"],
-                "date_range": group.get("date_range", ""),
-                "photo_count": len(image_files),
-                "video_count": len(video_files),
-                "total_count": len(group["files"]),
-                "thumbnail": thumbnail,
-            })
+        # AI 테마 분류
+        s["status"] = "categorizing"
+        s["message"] = "AI가 사진을 테마별로 분류하고 있습니다..."
+        theme_cards = categorize_photos(media_files, location_groups)
 
         s["status"] = "ready"
-        s["message"] = "여행 분류 완료!"
+        s["message"] = "테마 분류 완료!"
         s["media_files"] = media_files
         s["location_groups"] = location_groups
-        s["trips"] = trips
+        s["theme_cards"] = theme_cards
 
     except Exception as e:
         s["status"] = "error"
@@ -374,7 +353,7 @@ def analyze_status(upload_id):
     return jsonify({
         "status": s["status"],
         "message": s["message"],
-        "trips": s.get("trips", []),
+        "theme_cards": s.get("theme_cards", []),
         "uploaded_count": s.get("uploaded_count", 0),
     })
 
@@ -404,8 +383,17 @@ def run_pipeline(job_id: str, upload_id: str, selected_trip_ids: list, options: 
         return
 
     try:
-        all_groups = s["location_groups"]
-        selected_groups = [all_groups[i] for i in selected_trip_ids if i < len(all_groups)]
+        # 테마 카드에서 선택된 그룹 구성 (location_groups 호환 포맷)
+        theme_cards = s.get("theme_cards", [])
+        selected_groups = []
+        for i in selected_trip_ids:
+            if i < len(theme_cards):
+                t = theme_cards[i]
+                selected_groups.append({
+                    "location_name": t["name"],
+                    "files": t["files"],
+                    "date_range": t.get("date_range", ""),
+                })
         if not selected_groups:
             job["status"] = "error"
             job["message"] = "선택된 여행이 없습니다."

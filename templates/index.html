@@ -152,6 +152,15 @@
         .preview-grid .preview-more-cell { width:100%; aspect-ratio:1; border-radius:6px; background:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:13px; color:var(--dim); font-weight:500; }
         .preview-count { text-align:center; margin-top:8px; font-size:13px; color:var(--accent-l); font-weight:500; }
 
+        /* ── Theme badges ── */
+        .theme-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:600; margin-left:6px; vertical-align:middle; }
+        .theme-badge.travel { background:rgba(59,130,246,0.2); color:#60a5fa; }
+        .theme-badge.baby { background:rgba(244,114,182,0.2); color:#f472b6; }
+        .theme-badge.event { background:rgba(251,146,60,0.2); color:#fb923c; }
+        .theme-badge.seasonal { background:rgba(74,222,128,0.2); color:#4ade80; }
+        .theme-badge.daily { background:rgba(120,120,160,0.2); color:var(--dim); }
+        .trip-desc { font-size:11px; color:var(--dim); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
         /* ── Select all ── */
         .select-all-bar { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
         .select-all-btn { background:none; border:1px solid var(--border); color:var(--accent-l); font-size:12px; padding:6px 14px; border-radius:16px; cursor:pointer; }
@@ -271,7 +280,7 @@
         <!-- 여행 목록 -->
         <div id="tripsView" style="display:none">
             <div class="select-all-bar">
-                <div class="section-title" style="margin-bottom:0">어떤 여행을 영상으로?</div>
+                <div class="section-title" style="margin-bottom:0">어떤 테마를 영상으로?</div>
                 <button class="select-all-btn" id="selectAllBtn" onclick="toggleSelectAll()">전체 선택</button>
             </div>
             <div class="trip-count" id="tripCount" style="margin-bottom:12px"></div>
@@ -296,7 +305,7 @@
                 </div>
             </div>
 
-            <button class="btn" id="generateBtn" onclick="startGeneration()" disabled>여행을 선택하세요</button>
+            <button class="btn" id="generateBtn" onclick="startGeneration()" disabled>테마를 선택하세요</button>
         </div>
 
         <div class="error-msg" id="tripError"></div>
@@ -588,7 +597,7 @@ async function pollFetch() {
             showScreen('tripScreen');
             document.getElementById('analyzingView').style.display = 'none';
             document.getElementById('fetchingView').style.display = 'none';
-            renderTrips(d.trips);
+            renderTrips(d.theme_cards);
             return;
         }
         if (d.status === 'error') {
@@ -672,35 +681,40 @@ async function pollAnalyze() {
     try {
         const d = (await (await fetch(`/api/analyze/${uploadId}`)).json());
         document.getElementById('analyzingMsg').textContent = d.message;
-        if (d.status === 'ready') { renderTrips(d.trips); return; }
+        if (d.status === 'ready') { renderTrips(d.theme_cards); return; }
         if (d.status === 'error') { showErr('tripError', d.message); document.getElementById('analyzingView').style.display='none'; return; }
         setTimeout(pollAnalyze, 800);
     } catch(e) { setTimeout(pollAnalyze, 1500); }
 }
 
-// ── Trip Cards ──
-function renderTrips(trips) {
-    allTrips = trips;
+// ── Theme Cards ──
+const typeLabels = { travel:'여행', baby:'아기', event:'이벤트', seasonal:'계절', daily:'일상' };
+
+function renderTrips(themes) {
+    allTrips = themes;
     document.getElementById('analyzingView').style.display = 'none';
     document.getElementById('tripsView').style.display = '';
     const list = document.getElementById('tripList');
     list.innerHTML = '';
     selectedTrips.clear();
 
-    document.getElementById('tripCount').textContent = `${trips.length}개 장소 발견`;
+    document.getElementById('tripCount').textContent = `${themes.length}개 테마 발견`;
 
-    trips.forEach(t => {
+    themes.forEach(t => {
         const card = document.createElement('div');
         card.className = 'trip-card';
         card.id = `trip-${t.id}`;
         card.onclick = () => { toggleTrip(t.id, card); };
         const thumbHtml = t.thumbnail
-            ? `<img class="trip-thumb" src="/api/thumbnail/${uploadId}/${t.thumbnail}" alt="" onerror="this.outerHTML='<div class=\\'trip-thumb-empty\\'>&#127758;</div>'">`
-            : `<div class="trip-thumb-empty">&#127758;</div>`;
+            ? `<img class="trip-thumb" src="/api/thumbnail/${uploadId}/${t.thumbnail}" alt="" onerror="this.outerHTML='<div class=\\'trip-thumb-empty\\'>${t.emoji || '&#127758;'}</div>'">`
+            : `<div class="trip-thumb-empty">${t.emoji || '&#127758;'}</div>`;
+        const badgeType = t.type || 'daily';
+        const badgeLabel = typeLabels[badgeType] || badgeType;
         card.innerHTML = `${thumbHtml}
             <div class="trip-info">
-                <div class="trip-name">${t.location}</div>
-                <div class="trip-meta">${t.date_range || '날짜 미상'} &middot; ${t.photo_count}장${t.video_count ? ' + '+t.video_count+'영상':''}</div>
+                <div class="trip-name">${t.emoji || ''} ${t.name}<span class="theme-badge ${badgeType}">${badgeLabel}</span></div>
+                <div class="trip-meta">${t.date_range || ''} &middot; ${t.photo_count}장${t.video_count ? ' + '+t.video_count+'영상':''}</div>
+                ${t.description ? `<div class="trip-desc">${t.description}</div>` : ''}
             </div>
             <div class="trip-check">&#10003;</div>`;
         list.appendChild(card);
@@ -737,7 +751,7 @@ function toggleSelectAll() {
 function updateGenerateBtn() {
     const btn = document.getElementById('generateBtn');
     btn.disabled = selectedTrips.size === 0;
-    btn.textContent = selectedTrips.size > 0 ? `${selectedTrips.size}개 여행 영상 만들기` : '여행을 선택하세요';
+    btn.textContent = selectedTrips.size > 0 ? `${selectedTrips.size}개 테마 영상 만들기` : '테마를 선택하세요';
 }
 
 // ── Generate ──
@@ -758,7 +772,7 @@ async function startGeneration() {
             })
         });
         const d = await r.json();
-        if (d.error) { alert(d.error); btn.disabled=false; btn.textContent=`${selectedTrips.size}개 여행 영상 만들기`; return; }
+        if (d.error) { alert(d.error); btn.disabled=false; btn.textContent=`${selectedTrips.size}개 테마 영상 만들기`; return; }
         currentJobId = d.job_id;
         showScreen('progressScreen');
         for(let i=1;i<=3;i++){const s=document.getElementById(`pStep${i}`);s.className='step pending';s.querySelector('.step-dot').textContent=i;}
