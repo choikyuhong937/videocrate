@@ -31,9 +31,9 @@ from google_photos import (
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500MB
 app.secret_key = config.FLASK_SECRET_KEY
-# Railway HTTPS 프록시 환경에서 세션 쿠키 유지를 위한 설정
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_SECURE"] = False  # Railway 내부는 HTTP
+app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
@@ -110,6 +110,10 @@ def auth_callback():
             "name": user_info.get("name", ""),
             "picture": user_info.get("picture", ""),
         }
+        session.modified = True
+
+        # 세션 저장 확인
+        print(f"[auth] 세션 저장 완료: user={user_info.get('email')}, token_len={len(access_token)}")
 
         return redirect("/tripvideo?logged_in=1")
 
@@ -146,6 +150,22 @@ def api_user():
             "picture": google_user["picture"],
         })
     return jsonify({"logged_in": False})
+
+
+@app.route("/auth/debug")
+def auth_debug():
+    """세션 상태 디버그."""
+    has_token = bool(session.get("google_access_token"))
+    has_user = bool(session.get("google_user"))
+    user_email = session.get("google_user", {}).get("email", "없음")
+    session_keys = list(session.keys())
+    return jsonify({
+        "has_token": has_token,
+        "has_user": has_user,
+        "user_email": user_email,
+        "session_keys": session_keys,
+        "cookie_header": request.headers.get("Cookie", "없음")[:100],
+    })
 
 
 # ─── Google Drive: 날짜 기반 사진 조회 (메타데이터만, 다운로드 없음) ───
