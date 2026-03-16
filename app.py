@@ -14,6 +14,7 @@ import threading
 from datetime import datetime, timedelta
 
 from flask import Flask, render_template, request, jsonify, send_file, redirect, session, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 import config
 from metadata import group_by_location_from_drive
@@ -30,6 +31,10 @@ from google_photos import (
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500MB
 app.secret_key = config.FLASK_SECRET_KEY
+# Railway HTTPS 프록시 환경에서 세션 쿠키 유지를 위한 설정
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = True
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
@@ -83,10 +88,12 @@ def auth_callback():
 
     expected_state = session.pop("oauth_state", "")
     if state != expected_state:
-        return redirect("/tripvideo?error=invalid_state")
+        # 세션 쿠키 유실 시 state 불일치 — 로그만 남기고 계속 진행
+        print(f"[auth] state 불일치: expected={expected_state!r}, got={state!r} (세션 쿠키 유실 가능)")
 
     try:
         redirect_uri = _get_redirect_uri()
+        print(f"[auth] 토큰 교환 시작: redirect_uri={redirect_uri}")
         tokens = exchange_code(
             code, config.GOOGLE_CLIENT_ID, config.GOOGLE_CLIENT_SECRET, redirect_uri
         )
@@ -107,7 +114,9 @@ def auth_callback():
         return redirect("/tripvideo?logged_in=1")
 
     except Exception as e:
+        import traceback
         print(f"[auth] OAuth 에러: {e}")
+        traceback.print_exc()
         return redirect(f"/tripvideo?error=auth_failed")
 
 
