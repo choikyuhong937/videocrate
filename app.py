@@ -25,7 +25,7 @@ from categorizer import categorize_photos
 from google_photos import (
     get_auth_url, exchange_code, get_user_info,
     refresh_access_token, list_photos_by_date,
-    drive_files_to_media, download_drive_files,
+    photos_to_media, download_photos,
 )
 
 app = Flask(__name__)
@@ -171,33 +171,30 @@ def auth_debug():
 # ─── Google Drive: 날짜 기반 사진 조회 (메타데이터만, 다운로드 없음) ───
 
 def fetch_photos_by_date(upload_id, access_token, date_from, date_to, api_key):
-    """Drive API로 사진 메타데이터만 조회 → 위치 그룹핑 → AI 테마 분류.
-
-    다운로드 없음 — 메타데이터 + 썸네일만 사용하여 빠르게 분류.
-    """
+    """Photos Library API로 사진 조회 → 메타데이터 변환 → AI 테마 분류."""
     sess = sessions[upload_id]
     try:
-        # 1단계: Drive API 메타데이터 조회 (빠름, 네트워크 요청만)
+        # 1단계: Photos Library API로 사진 조회
         sess["status"] = "fetching"
         sess["message"] = f"{date_from} ~ {date_to} 사진을 검색하고 있습니다..."
 
-        drive_files = list_photos_by_date(access_token, date_from, date_to)
+        photo_items = list_photos_by_date(access_token, date_from, date_to)
 
-        if not drive_files:
+        if not photo_items:
             sess["status"] = "error"
             sess["message"] = "해당 기간에 사진이 없습니다. 다른 날짜를 선택해주세요."
             return
 
-        # 2단계: Drive 메타데이터 → media_files 변환 (EXIF 불필요, 즉시)
-        media_files = drive_files_to_media(drive_files)
+        # 2단계: media_files 변환
+        media_files = photos_to_media(photo_items)
         sess["uploaded_count"] = len(media_files)
-        sess["message"] = f"{len(media_files)}개 사진 발견. 위치를 분석하고 있습니다..."
+        sess["message"] = f"{len(media_files)}개 사진 발견. 분석 중..."
 
-        # 3단계: 위치 그룹핑 (Drive 메타데이터의 GPS 사용, 역지오코딩 병렬)
+        # 3단계: 위치 그룹핑 (Photos API는 GPS 미제공 → 날짜 기반 그룹핑)
         sess["status"] = "analyzing"
         location_groups = group_by_location_from_drive(media_files)
 
-        # 4단계: AI 테마 분류 (썸네일 URL 사용, 다운로드 없음)
+        # 4단계: AI 테마 분류
         sess["status"] = "categorizing"
         sess["message"] = "AI가 사진을 테마별로 분류하고 있습니다..."
 
@@ -330,11 +327,10 @@ def run_pipeline(job_id: str, upload_id: str, selected_trip_ids: list, options: 
         job["step"] = 0
         job["message"] = f"{total_files}장 다운로드 중..."
 
-        access_token = options.get("access_token", "")
         download_dir = os.path.join(UPLOAD_DIR, upload_id)
         s["folder"] = download_dir
 
-        downloaded = download_drive_files(access_token, selected_media, download_dir)
+        downloaded = download_photos(selected_media, download_dir)
 
         # 다운로드 실패한 파일 제거
         for group in selected_groups:

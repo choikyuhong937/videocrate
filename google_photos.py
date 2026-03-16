@@ -1,7 +1,6 @@
-"""Google OAuth 2.0 + Drive API 연동 모듈.
+"""Google OAuth 2.0 + Photos Library API 연동 모듈.
 
-흐름: OAuth 로그인 → Drive API로 날짜 기반 사진 조회 → 다운로드
-(Photos Library API는 2025-03-31 폐지 → Drive API로 대체)
+흐름: OAuth 로그인 → Photos Library API로 날짜 기반 사진 조회 → 다운로드
 """
 
 import os
@@ -12,10 +11,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
-DRIVE_API_BASE = "https://www.googleapis.com/drive/v3"
+PHOTOS_API_BASE = "https://photoslibrary.googleapis.com/v1"
 
 SCOPES = [
-    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/photoslibrary.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
 ]
@@ -69,114 +68,130 @@ def get_user_info(access_token):
     return resp.json()
 
 
-# ─── Drive API: 날짜 기반 사진 조회 ───
+# ─── Photos Library API: 날짜 기반 사진 조회 ───
 
 def list_photos_by_date(access_token, date_from, date_to, max_items=500):
-    """Google Drive에서 날짜 범위로 사진/영상을 조회 (메타데이터만, 다운로드 없음).
+    """Google Photos Library API로 날짜 범위의 사진/영상을 조회.
+
+    Args:
+        date_from: "YYYY-MM-DD"
+        date_to: "YYYY-MM-DD"
 
     Returns:
-        Drive 파일 목록 [{id, name, mimeType, createdTime, imageMediaMetadata, thumbnailLink, ...}]
+        Photos API mediaItems 리스트
     """
-    headers = {"Authorization": f"Bearer {access_token}"}
-    fields = "nextPageToken,files(id,name,mimeType,createdTime,modifiedTime,imageMediaMetadata,size,thumbnailLink)"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+
+    # 날짜 파싱
+    from_parts = date_from.split("-")
+    to_parts = date_to.split("-")
+
+    body = {
+        "pageSize": min(100, max_items),
+        "filters": {
+            "dateFilter": {
+                "ranges": [{
+                    "startDate": {
+                        "year": int(from_parts[0]),
+                        "month": int(from_parts[1]),
+                        "day": int(from_parts[2]),
+                    },
+                    "endDate": {
+                        "year": int(to_parts[0]),
+                        "month": int(to_parts[1]),
+                        "day": int(to_parts[2]),
+                    },
+                }]
+            }
+        },
+    }
 
     all_items = []
+    page_token = None
 
-    # 이미지와 영상을 각각 조회 (or 조건 대신 분리하여 안정적)
-    for mime_filter in ["mimeType contains 'image/'", "mimeType contains 'video/'"]:
-        query = f"{mime_filter} and modifiedTime >= '{date_from}T00:00:00' and modifiedTime <= '{date_to}T23:59:59' and trashed = false"
-        page_token = None
+    while len(all_items) < max_items:
+        if page_token:
+            body["pageToken"] = page_token
 
-        while len(all_items) < max_items:
-            params = {
-                "q": query,
-                "fields": fields,
-                "pageSize": min(100, max_items - len(all_items)),
-            }
-            if page_token:
-                params["pageToken"] = page_token
+        resp = requests.post(
+            f"{PHOTOS_API_BASE}/mediaItems:search",
+            headers=headers,
+            json=body,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
-            resp = requests.get(
-                f"{DRIVE_API_BASE}/files",
-                headers=headers,
-                params=params,
-                timeout=30,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        items = data.get("mediaItems", [])
+        all_items.extend(items)
 
-            files = data.get("files", [])
-            all_items.extend(files)
+        page_token = data.get("nextPageToken")
+        if not page_token:
+            break
 
-            page_token = data.get("nextPageToken")
-            if not page_token:
-                break
-
-    print(f"[drive] {len(all_items)}개 미디어 항목 조회됨 ({date_from} ~ {date_to})")
+    print(f"[photos] {len(all_items)}개 미디어 항목 조회됨 ({date_from} ~ {date_to})")
     return all_items
 
 
-def drive_files_to_media(drive_files):
-    """Drive API 응답을 media_files 형식으로 변환 (다운로드 없이 메타데이터만).
-
-    Drive의 imageMediaMetadata에서 GPS/날짜를 직접 추출하여 EXIF 파싱 불필요.
-    """
+def photos_to_media(photo_items):
+    """Photos Library API 응답을 media_files 형식으로 변환."""
     media_files = []
-    for item in drive_files:
+    for item in photo_items:
+        meta = item.get("mediaMetadata", {})
+        creation_time = meta.get("creationTime", "")
         mime = item.get("mimeType", "")
         file_type = "video" if "video" in mime else "image"
-        meta = item.get("imageMediaMetadata", {})
-        location = meta.get("location", {})
 
-        lat = location.get("latitude")
-        lon = location.get("longitude")
-        creation_time = item.get("createdTime", item.get("modifiedTime", ""))
-
+        # Photos API에서 GPS는 제공하지 않음 (EXIF 다운로드 후 추출 필요)
         media_files.append({
-            "drive_id": item["id"],
-            "filename": item.get("name", "photo.jpg"),
-            "path": None,  # 아직 다운로드 안 됨
+            "photo_id": item["id"],
+            "filename": item.get("filename", "photo.jpg"),
+            "path": None,
             "type": file_type,
             "modified_time": creation_time,
             "datetime": creation_time,
-            "lat": lat,
-            "lon": lon,
+            "lat": None,
+            "lon": None,
             "location_name": "",
-            "thumbnailLink": item.get("thumbnailLink", ""),
-            "size": int(item.get("size", 0)),
+            "baseUrl": item.get("baseUrl", ""),
+            "width": int(meta.get("width", 0)),
+            "height": int(meta.get("height", 0)),
         })
     return media_files
 
 
-def download_drive_files(access_token, media_files, download_dir, max_workers=8):
-    """media_files의 drive_id로 실제 파일을 병렬 다운로드.
-
-    Args:
-        media_files: drive_files_to_media() 결과 (drive_id 필드 필요)
-        max_workers: 동시 다운로드 스레드 수
+def download_photos(media_files, download_dir, max_workers=8):
+    """Photos Library API의 baseUrl로 실제 파일을 병렬 다운로드.
 
     Returns:
         다운로드된 파일 수
     """
     os.makedirs(download_dir, exist_ok=True)
-    headers = {"Authorization": f"Bearer {access_token}"}
 
     def _download_one(idx, item):
-        drive_id = item.get("drive_id")
-        if not drive_id:
+        base_url = item.get("baseUrl")
+        if not base_url:
             return False
+
         filename = item["filename"]
         file_path = os.path.join(download_dir, filename)
 
-        # 중복 파일명 처리
         if os.path.exists(file_path):
             name, ext = os.path.splitext(filename)
             filename = f"{name}_{idx}{ext}"
             file_path = os.path.join(download_dir, filename)
 
         try:
-            dl_url = f"{DRIVE_API_BASE}/files/{drive_id}?alt=media"
-            resp = requests.get(dl_url, headers=headers, timeout=120, stream=True)
+            # baseUrl + =d 로 원본 다운로드, =w{max}-h{max} 로 리사이즈
+            if item["type"] == "video":
+                dl_url = f"{base_url}=dv"
+            else:
+                dl_url = f"{base_url}=d"
+
+            resp = requests.get(dl_url, timeout=120, stream=True)
             resp.raise_for_status()
 
             with open(file_path, "wb") as f:
@@ -187,7 +202,7 @@ def download_drive_files(access_token, media_files, download_dir, max_workers=8)
             item["filename"] = filename
             return True
         except Exception as e:
-            print(f"[drive] 다운로드 실패: {item.get('filename', '?')} - {e}")
+            print(f"[photos] 다운로드 실패: {item.get('filename', '?')} - {e}")
             return False
 
     success = 0
@@ -200,7 +215,7 @@ def download_drive_files(access_token, media_files, download_dir, max_workers=8)
             if future.result():
                 success += 1
                 if success % 20 == 0:
-                    print(f"[drive] {success}/{len(media_files)} 다운로드 완료")
+                    print(f"[photos] {success}/{len(media_files)} 다운로드 완료")
 
-    print(f"[drive] 총 {success}/{len(media_files)} 다운로드 완료")
+    print(f"[photos] 총 {success}/{len(media_files)} 다운로드 완료")
     return success

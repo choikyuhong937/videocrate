@@ -39,11 +39,16 @@ def _build_manifest(media_files):
 
 
 def _fetch_thumbnail(url, access_token=None, max_size=400):
-    """Drive thumbnailLink에서 이미지를 가져와 bytes로 반환."""
+    """Photos API baseUrl 또는 Drive thumbnailLink에서 이미지를 가져와 bytes로 반환."""
     if not url:
         return None
-    # Drive 썸네일 크기 조정 (s220 → s{max_size})
-    sized_url = url.split("=")[0] + f"=s{max_size}" if "=" in url else url
+    # Photos API baseUrl은 =w{width}-h{height} 로 리사이즈
+    if "googleusercontent.com" in url and "=" not in url:
+        sized_url = f"{url}=w{max_size}-h{max_size}"
+    elif "=" in url:
+        sized_url = url.split("=")[0] + f"=w{max_size}-h{max_size}"
+    else:
+        sized_url = url
     try:
         headers = {}
         if access_token:
@@ -56,9 +61,14 @@ def _fetch_thumbnail(url, access_token=None, max_size=400):
         return None
 
 
+def _get_thumb_url(f):
+    """media_file에서 썸네일 URL 추출 (Photos API baseUrl 또는 Drive thumbnailLink)."""
+    return f.get("baseUrl") or f.get("thumbnailLink") or ""
+
+
 def _select_sample_indices(media_files, location_groups, max_samples=20):
     """각 위치 그룹에서 대표 이미지 인덱스를 선택."""
-    samples = []  # [(global_index, thumbnailLink)]
+    samples = []  # [(global_index, thumb_url)]
     images_only = [
         (i, f) for i, f in enumerate(media_files) if f["type"] == "image"
     ]
@@ -75,20 +85,20 @@ def _select_sample_indices(media_files, location_groups, max_samples=20):
 
             first = group_images[0]
             idx = next(
-                (i for i, f in enumerate(media_files) if f.get("drive_id") == first.get("drive_id") or f["filename"] == first["filename"]),
+                (i for i, f in enumerate(media_files) if f["filename"] == first["filename"]),
                 None,
             )
             if idx is not None:
-                samples.append((idx, media_files[idx].get("thumbnailLink", "")))
+                samples.append((idx, _get_thumb_url(media_files[idx])))
 
             if len(group_images) > 2 and per_group > 1:
                 mid = group_images[len(group_images) // 2]
                 idx2 = next(
-                    (i for i, f in enumerate(media_files) if f.get("drive_id") == mid.get("drive_id") or f["filename"] == mid["filename"]),
+                    (i for i, f in enumerate(media_files) if f["filename"] == mid["filename"]),
                     None,
                 )
                 if idx2 is not None and idx2 != idx:
-                    samples.append((idx2, media_files[idx2].get("thumbnailLink", "")))
+                    samples.append((idx2, _get_thumb_url(media_files[idx2])))
 
             if len(samples) >= max_samples:
                 break
@@ -96,7 +106,7 @@ def _select_sample_indices(media_files, location_groups, max_samples=20):
         step = max(1, len(images_only) // max_samples)
         for j in range(0, len(images_only), step):
             i, f = images_only[j]
-            samples.append((i, f.get("thumbnailLink", "")))
+            samples.append((i, _get_thumb_url(f)))
             if len(samples) >= max_samples:
                 break
 
