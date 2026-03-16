@@ -101,8 +101,8 @@ def list_picker_media_items(access_token, session_id):
     page_token = None
 
     while True:
-        url = f"{PICKER_API_BASE}/sessions/{session_id}/mediaItems"
-        params = {"pageSize": 100}
+        url = f"{PICKER_API_BASE}/mediaItems"
+        params = {"sessionId": session_id, "pageSize": 100}
         if page_token:
             params["pageToken"] = page_token
 
@@ -145,13 +145,21 @@ def picker_items_to_media(picker_items):
         media_type = item.get("type", "PHOTO")
         file_type = "video" if media_type == "VIDEO" else "image"
 
-        # Picker API mediaItem 구조
+        # Picker API PickedMediaItem 구조
+        media_file = item.get("mediaFile", {})
         creation_time = item.get("createTime", "")
-        mime = item.get("mimeType", "image/jpeg")
+        mime = media_file.get("mimeType", "image/jpeg")
+        original_filename = media_file.get("filename", "")
+
+        # 파일명: 원본 파일명 우선, 없으면 ID 기반
+        if original_filename:
+            filename = original_filename
+        else:
+            filename = item.get("id", "photo") + (".mp4" if file_type == "video" else ".jpg")
 
         media_files.append({
             "picker_id": item.get("id", ""),
-            "filename": item.get("id", "photo") + (".mp4" if file_type == "video" else ".jpg"),
+            "filename": filename,
             "path": None,
             "type": file_type,
             "modified_time": creation_time,
@@ -159,7 +167,7 @@ def picker_items_to_media(picker_items):
             "lat": None,
             "lon": None,
             "location_name": "",
-            "baseUrl": item.get("mediaFile", {}).get("baseUrl", ""),
+            "baseUrl": media_file.get("baseUrl", ""),
             "mimeType": mime,
         })
     return media_files
