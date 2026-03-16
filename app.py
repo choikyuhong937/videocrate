@@ -88,12 +88,11 @@ def auth_callback():
 
     expected_state = session.pop("oauth_state", "")
     if state != expected_state:
-        # 세션 쿠키 유실 시 state 불일치 — 로그만 남기고 계속 진행
-        print(f"[auth] state 불일치: expected={expected_state!r}, got={state!r} (세션 쿠키 유실 가능)")
+        print(f"[auth] state 불일치: expected={expected_state!r}, got={state!r}")
 
     try:
         redirect_uri = _get_redirect_uri()
-        print(f"[auth] 토큰 교환 시작: redirect_uri={redirect_uri}")
+        print(f"[auth] 토큰 교환: redirect_uri={redirect_uri}")
         tokens = exchange_code(
             code, config.GOOGLE_CLIENT_ID, config.GOOGLE_CLIENT_SECRET, redirect_uri
         )
@@ -102,6 +101,7 @@ def auth_callback():
         refresh_token = tokens.get("refresh_token", "")
 
         user_info = get_user_info(access_token)
+        print(f"[auth] 로그인 성공: {user_info.get('email', '?')}")
 
         session["google_access_token"] = access_token
         session["google_refresh_token"] = refresh_token
@@ -115,9 +115,18 @@ def auth_callback():
 
     except Exception as e:
         import traceback
-        print(f"[auth] OAuth 에러: {e}")
         traceback.print_exc()
-        return redirect(f"/tripvideo?error=auth_failed")
+        # 에러 내용을 직접 화면에 표시 (디버그용)
+        return f"""<html><body style="background:#111;color:#eee;font-family:monospace;padding:20px">
+        <h2 style="color:#f87171">OAuth 에러</h2>
+        <p><b>에러:</b> {str(e)}</p>
+        <p><b>redirect_uri:</b> {_get_redirect_uri()}</p>
+        <p><b>scheme:</b> {request.scheme}</p>
+        <p><b>X-Forwarded-Proto:</b> {request.headers.get('X-Forwarded-Proto', 'N/A')}</p>
+        <p><b>host:</b> {request.host}</p>
+        <p><b>X-Forwarded-Host:</b> {request.headers.get('X-Forwarded-Host', 'N/A')}</p>
+        <p style="margin-top:20px"><a href="/tripvideo" style="color:#a594ff">← 돌아가기</a></p>
+        </body></html>""", 500
 
 
 @app.route("/auth/logout")
