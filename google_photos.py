@@ -78,45 +78,39 @@ def list_photos_by_date(access_token, date_from, date_to, max_items=500):
         Drive 파일 목록 [{id, name, mimeType, createdTime, imageMediaMetadata, thumbnailLink, ...}]
     """
     headers = {"Authorization": f"Bearer {access_token}"}
-
-    query_parts = [
-        "(mimeType contains 'image/' or mimeType contains 'video/')",
-        f"createdTime >= '{date_from}T00:00:00'",
-        f"createdTime <= '{date_to}T23:59:59'",
-        "trashed = false",
-    ]
-    query = " and ".join(query_parts)
-
     fields = "nextPageToken,files(id,name,mimeType,createdTime,modifiedTime,imageMediaMetadata,size,thumbnailLink)"
 
     all_items = []
-    page_token = None
 
-    while len(all_items) < max_items:
-        params = {
-            "q": query,
-            "fields": fields,
-            "pageSize": min(100, max_items - len(all_items)),
-            "orderBy": "createdTime",
-        }
-        if page_token:
-            params["pageToken"] = page_token
+    # 이미지와 영상을 각각 조회 (or 조건 대신 분리하여 안정적)
+    for mime_filter in ["mimeType contains 'image/'", "mimeType contains 'video/'"]:
+        query = f"{mime_filter} and modifiedTime >= '{date_from}T00:00:00' and modifiedTime <= '{date_to}T23:59:59' and trashed = false"
+        page_token = None
 
-        resp = requests.get(
-            f"{DRIVE_API_BASE}/files",
-            headers=headers,
-            params=params,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        while len(all_items) < max_items:
+            params = {
+                "q": query,
+                "fields": fields,
+                "pageSize": min(100, max_items - len(all_items)),
+            }
+            if page_token:
+                params["pageToken"] = page_token
 
-        files = data.get("files", [])
-        all_items.extend(files)
+            resp = requests.get(
+                f"{DRIVE_API_BASE}/files",
+                headers=headers,
+                params=params,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
-        page_token = data.get("nextPageToken")
-        if not page_token:
-            break
+            files = data.get("files", [])
+            all_items.extend(files)
+
+            page_token = data.get("nextPageToken")
+            if not page_token:
+                break
 
     print(f"[drive] {len(all_items)}개 미디어 항목 조회됨 ({date_from} ~ {date_to})")
     return all_items
