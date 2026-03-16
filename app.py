@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """VideoCrate Web - 여행 영상 자동 생성 웹 앱.
 
-흐름: Google 로그인 → 날짜 범위 선택 → Drive API로 사진 자동 조회 → AI 테마 분류 → 영상 생성
+흐름: Google 로그인 → 날짜 범위 선택 → Drive API 메타데이터 조회 → AI 테마 분류 → 테마 선택 → 다운로드 & 영상 생성
+
+최적화: 사진은 테마 선택 후에만 다운로드 (메타데이터 + 썸네일로 분류)
 """
 
 import os
@@ -14,15 +16,15 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template, request, jsonify, send_file, redirect, session, url_for
 
 import config
-from fetcher import scan_local_folder
-from metadata import enrich_media_with_metadata, group_by_location
+from metadata import group_by_location_from_drive
 from selector import select_best_photos
 from subtitles import generate_subtitles, write_srt
 from video import generate_video
 from categorizer import categorize_photos
 from google_photos import (
     get_auth_url, exchange_code, get_user_info,
-    refresh_access_token, list_photos_by_date, download_drive_files,
+    refresh_access_token, list_photos_by_date,
+    drive_files_to_media, download_drive_files,
 )
 
 app = Flask(__name__)
@@ -35,7 +37,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # 세션/작업 상태 (메모리)
-sessions = {}  # upload_id → {folder, media_files, location_groups}
+sessions = {}  # upload_id → {media_files, theme_cards, ...}
 jobs = {}      # job_id → {status, step, message, ...}
 
 
@@ -50,17 +52,15 @@ def _get_redirect_uri():
 
 @app.route("/auth/google")
 def auth_google():
-    """Google OAuth 시작 - Google 로그인 페이지로 리디렉트."""
+    """Google OAuth 시작."""
     client_id = config.GOOGLE_CLIENT_ID
     if not client_id:
         return redirect("/tripvideo?error=google_not_configured")
 
-    # API key를 세션에 임시 저장 (OAuth 콜백 후 복원용)
     api_key = request.args.get("api_key", "")
     if api_key:
         session["pending_api_key"] = api_key
 
-    # state는 CSRF 방지용 랜덤 토큰
     state = str(uuid.uuid4())[:8]
     session["oauth_state"] = state
 
@@ -71,18 +71,16 @@ def auth_google():
 
 @app.route("/auth/callback")
 def auth_callback():
-    """Google OAuth 콜백 - 토큰 교환 후 메인 페이지로."""
+    """Google OAuth 콜백."""
     code = request.args.get("code")
     error = request.args.get("error")
     state = request.args.get("state", "")
 
     if error:
         return redirect(f"/tripvideo?error={error}")
-
     if not code:
         return redirect("/tripvideo?error=no_code")
 
-    # CSRF 검증
     expected_state = session.pop("oauth_state", "")
     if state != expected_state:
         return redirect("/tripvideo?error=invalid_state")
@@ -96,10 +94,8 @@ def auth_callback():
         access_token = tokens["access_token"]
         refresh_token = tokens.get("refresh_token", "")
 
-        # 사용자 정보 조회
         user_info = get_user_info(access_token)
 
-        # 세션에 저장
         session["google_access_token"] = access_token
         session["google_refresh_token"] = refresh_token
         session["google_user"] = {
@@ -117,14 +113,12 @@ def auth_callback():
 
 @app.route("/auth/logout")
 def auth_logout():
-    """로그아웃."""
     session.clear()
     return redirect("/tripvideo")
 
 
 @app.route("/api/user")
 def api_user():
-    """현재 로그인 사용자 정보."""
     google_user = session.get("google_user")
     if google_user:
         return jsonify({
@@ -136,13 +130,16 @@ def api_user():
     return jsonify({"logged_in": False})
 
 
-# ─── Google Drive: 날짜 기반 사진 조회 ───
+# ─── Google Drive: 날짜 기반 사진 조회 (메타데이터만, 다운로드 없음) ───
 
 def fetch_photos_by_date(upload_id, access_token, date_from, date_to, api_key):
-    """Drive API로 날짜 범위의 사진을 조회 → 다운로드 → AI 테마 분류."""
+    """Drive API로 사진 메타데이터만 조회 → 위치 그룹핑 → AI 테마 분류.
+
+    다운로드 없음 — 메타데이터 + 썸네일만 사용하여 빠르게 분류.
+    """
     sess = sessions[upload_id]
     try:
-        # 1단계: Drive API로 사진 목록 조회
+        # 1단계: Drive API 메타데이터 조회 (빠름, 네트워크 요청만)
         sess["status"] = "fetching"
         sess["message"] = f"{date_from} ~ {date_to} 사진을 검색하고 있습니다..."
 
@@ -153,32 +150,23 @@ def fetch_photos_by_date(upload_id, access_token, date_from, date_to, api_key):
             sess["message"] = "해당 기간에 사진이 없습니다. 다른 날짜를 선택해주세요."
             return
 
-        sess["message"] = f"{len(drive_files)}개 사진을 다운로드하고 있습니다..."
-
-        # 2단계: 다운로드
-        download_dir = os.path.join(UPLOAD_DIR, upload_id)
-        media_files = download_drive_files(access_token, drive_files, download_dir)
-
-        if not media_files:
-            sess["status"] = "error"
-            sess["message"] = "사진을 다운로드할 수 없습니다."
-            return
-
-        sess["folder"] = download_dir
+        # 2단계: Drive 메타데이터 → media_files 변환 (EXIF 불필요, 즉시)
+        media_files = drive_files_to_media(drive_files)
         sess["uploaded_count"] = len(media_files)
+        sess["message"] = f"{len(media_files)}개 사진 발견. 위치를 분석하고 있습니다..."
 
-        # 3단계: EXIF 분석 + 위치 그룹핑
+        # 3단계: 위치 그룹핑 (Drive 메타데이터의 GPS 사용, 역지오코딩 병렬)
         sess["status"] = "analyzing"
-        sess["message"] = "GPS/날짜 정보를 분석하고 있습니다..."
+        location_groups = group_by_location_from_drive(media_files)
 
-        media_files = enrich_media_with_metadata(media_files)
-        location_groups = group_by_location(media_files)
-
-        # 4단계: AI 테마 분류
+        # 4단계: AI 테마 분류 (썸네일 URL 사용, 다운로드 없음)
         sess["status"] = "categorizing"
         sess["message"] = "AI가 사진을 테마별로 분류하고 있습니다..."
 
-        theme_cards = categorize_photos(media_files, location_groups, api_key=api_key)
+        theme_cards = categorize_photos(
+            media_files, location_groups,
+            api_key=api_key, access_token=access_token,
+        )
 
         sess["status"] = "ready"
         sess["message"] = "테마 분류 완료!"
@@ -194,7 +182,7 @@ def fetch_photos_by_date(upload_id, access_token, date_from, date_to, api_key):
 
 @app.route("/api/fetch-by-date", methods=["POST"])
 def api_fetch_by_date():
-    """날짜 범위로 Google Drive에서 사진 조회 & AI 분류 시작."""
+    """날짜 범위로 사진 조회 & AI 분류 시작 (다운로드 없이 빠르게)."""
     access_token = session.get("google_access_token")
     if not access_token:
         return jsonify({"error": "Google 로그인이 필요합니다."}), 401
@@ -242,7 +230,6 @@ def tripvideo():
 
 @app.route("/api/analyze/<upload_id>")
 def analyze_status(upload_id):
-    """분석 상태 조회."""
     s = sessions.get(upload_id)
     if not s:
         return jsonify({"error": "세션을 찾을 수 없습니다."}), 404
@@ -256,9 +243,8 @@ def analyze_status(upload_id):
 
 @app.route("/api/thumbnail/<upload_id>/<filename>")
 def thumbnail(upload_id, filename):
-    """업로드된 이미지 썸네일 제공."""
     s = sessions.get(upload_id)
-    if not s:
+    if not s or not s.get("folder"):
         return "", 404
     file_path = os.path.join(s["folder"], filename)
     if not os.path.isfile(file_path):
@@ -266,10 +252,10 @@ def thumbnail(upload_id, filename):
     return send_file(file_path, mimetype="image/jpeg")
 
 
-# ─── Phase 2: 테마 선택 → 영상 생성 ───
+# ─── Phase 2: 테마 선택 → 다운로드 → 영상 생성 ───
 
 def run_pipeline(job_id: str, upload_id: str, selected_trip_ids: list, options: dict):
-    """선택된 테마로 영상 생성 파이프라인 실행."""
+    """선택된 테마의 사진만 다운로드 후 영상 생성."""
     job = jobs[job_id]
     s = sessions.get(upload_id)
 
@@ -279,9 +265,10 @@ def run_pipeline(job_id: str, upload_id: str, selected_trip_ids: list, options: 
         return
 
     try:
-        # 테마 카드에서 선택된 그룹 구성 (location_groups 호환 포맷)
+        # 테마 카드에서 선택된 파일만 추출
         theme_cards = s.get("theme_cards", [])
         selected_groups = []
+        selected_media = []
         for i in selected_trip_ids:
             if i < len(theme_cards):
                 t = theme_cards[i]
@@ -290,14 +277,36 @@ def run_pipeline(job_id: str, upload_id: str, selected_trip_ids: list, options: 
                     "files": t["files"],
                     "date_range": t.get("date_range", ""),
                 })
+                selected_media.extend(t["files"])
+
         if not selected_groups:
             job["status"] = "error"
             job["message"] = "선택된 테마가 없습니다."
             return
 
-        total_files = sum(len(g["files"]) for g in selected_groups)
+        total_files = len(selected_media)
         job["total_files"] = total_files
         job["total_groups"] = len(selected_groups)
+
+        # 0단계: 선택된 사진만 다운로드 (병렬)
+        job["step"] = 0
+        job["message"] = f"{total_files}장 다운로드 중..."
+
+        access_token = options.get("access_token", "")
+        download_dir = os.path.join(UPLOAD_DIR, upload_id)
+        s["folder"] = download_dir
+
+        downloaded = download_drive_files(access_token, selected_media, download_dir)
+
+        # 다운로드 실패한 파일 제거
+        for group in selected_groups:
+            group["files"] = [f for f in group["files"] if f.get("path")]
+        selected_media = [f for f in selected_media if f.get("path")]
+
+        if not selected_media:
+            job["status"] = "error"
+            job["message"] = "사진 다운로드에 실패했습니다."
+            return
 
         # 1단계: AI 선별
         job["step"] = 1
@@ -343,7 +352,11 @@ def run_pipeline(job_id: str, upload_id: str, selected_trip_ids: list, options: 
 
 @app.route("/api/generate", methods=["POST"])
 def generate():
-    """선택된 테마로 영상 생성 시작."""
+    """선택된 테마로 영상 생성 (이때 다운로드 시작)."""
+    access_token = session.get("google_access_token")
+    if not access_token:
+        return jsonify({"error": "Google 로그인이 필요합니다."}), 401
+
     data = request.get_json()
     upload_id = data.get("upload_id")
     selected_trips = data.get("selected_trips", [])
@@ -359,6 +372,7 @@ def generate():
         "duration": data.get("duration", 4),
         "lang": data.get("lang", "ko"),
         "api_key": data.get("api_key", "").strip() or None,
+        "access_token": access_token,
     }
 
     job_id = str(uuid.uuid4())[:8]
@@ -380,7 +394,6 @@ def generate():
 
 @app.route("/api/status/<job_id>")
 def status(job_id):
-    """영상 생성 진행 상태 조회."""
     job = jobs.get(job_id)
     if not job:
         return jsonify({"error": "작업을 찾을 수 없습니다."}), 404
@@ -389,7 +402,6 @@ def status(job_id):
 
 @app.route("/api/download/<job_id>/<file_type>")
 def download(job_id, file_type):
-    """생성된 파일 다운로드."""
     job = jobs.get(job_id)
     if not job or job["status"] != "done":
         return jsonify({"error": "파일이 준비되지 않았습니다."}), 404
@@ -402,7 +414,6 @@ def download(job_id, file_type):
 
 @app.route("/video/<job_id>")
 def serve_video(job_id):
-    """영상 스트리밍."""
     job = jobs.get(job_id)
     if not job or job["status"] != "done":
         return jsonify({"error": "영상이 준비되지 않았습니다."}), 404

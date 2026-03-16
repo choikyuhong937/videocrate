@@ -301,9 +301,10 @@
         <div class="user-bar" id="userBar3"></div>
         <div class="card">
             <div class="section-title">영상 만드는 중...</div>
-            <div class="step pending" id="pStep1"><div class="step-dot">1</div><div class="step-text"><h4>AI 선별</h4><p>베스트 사진을 고르고 있어요</p></div></div>
-            <div class="step pending" id="pStep2"><div class="step-dot">2</div><div class="step-text"><h4>자막 생성</h4><p>감성 자막을 만들고 있어요</p></div></div>
-            <div class="step pending" id="pStep3"><div class="step-dot">3</div><div class="step-text"><h4>영상 렌더링</h4><p>효과 + 자막 합성 중</p></div></div>
+            <div class="step pending" id="pStep0"><div class="step-dot">1</div><div class="step-text"><h4>사진 다운로드</h4><p>선택한 테마의 사진을 가져오는 중</p></div></div>
+            <div class="step pending" id="pStep1"><div class="step-dot">2</div><div class="step-text"><h4>AI 선별</h4><p>베스트 사진을 고르고 있어요</p></div></div>
+            <div class="step pending" id="pStep2"><div class="step-dot">3</div><div class="step-text"><h4>자막 생성</h4><p>감성 자막을 만들고 있어요</p></div></div>
+            <div class="step pending" id="pStep3"><div class="step-dot">4</div><div class="step-text"><h4>영상 렌더링</h4><p>효과 + 자막 합성 중</p></div></div>
         </div>
         <div class="error-msg" id="progressError"></div>
     </div>
@@ -633,7 +634,7 @@ async function startGeneration() {
         if (d.error) { alert(d.error); btn.disabled=false; btn.textContent=`${selectedTrips.size}개 테마 영상 만들기`; return; }
         currentJobId = d.job_id;
         showScreen('progressScreen');
-        for(let i=1;i<=3;i++){const s=document.getElementById(`pStep${i}`);s.className='step pending';s.querySelector('.step-dot').textContent=i;}
+        for(let i=0;i<=3;i++){const s=document.getElementById(`pStep${i}`);s.className='step pending';s.querySelector('.step-dot').textContent=i+1;}
         pollProgress();
     } catch(e) { alert('요청 실패'); btn.disabled=false; }
 }
@@ -642,11 +643,11 @@ async function pollProgress() {
     try {
         const d = (await (await fetch(`/api/status/${currentJobId}`)).json());
         const step = d.step || 0;
-        for(let i=1;i<=3;i++){
+        for(let i=0;i<=3;i++){
             const s=document.getElementById(`pStep${i}`);
             if(i<step){s.className='step done';s.querySelector('.step-dot').textContent='\u2713';}
             else if(i===step){s.className='step active';s.querySelector('.step-dot').innerHTML='<div class="spinner"></div>';}
-            else{s.className='step pending';s.querySelector('.step-dot').textContent=i;}
+            else{s.className='step pending';s.querySelector('.step-dot').textContent=i+1;}
         }
         if(d.status==='done'){showResult(d);return;}
         if(d.status==='error'){showErr('progressError',d.message);return;}

@@ -1,9 +1,11 @@
 """EXIF 메타데이터 파싱 및 장소별 그룹핑 모듈."""
 
+import math
 import exifread
 import requests
 from datetime import datetime
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 
 
 def _convert_gps_to_decimal(gps_coords, gps_ref) -> float:
@@ -102,21 +104,16 @@ def enrich_media_with_metadata(media_files: list[dict]) -> list[dict]:
     return media_files
 
 
-def group_by_location(media_files: list[dict], distance_threshold_km: float = 2.0) -> list[dict]:
-    """미디어를 장소별로 그룹핑한다.
+def _haversine(lat1, lon1, lat2, lon2):
+    R = 6371
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    return R * 2 * math.asin(math.sqrt(a))
 
-    GPS가 없는 파일은 시간 기반으로 인접 그룹에 병합.
-    """
-    import math
 
-    def haversine(lat1, lon1, lat2, lon2):
-        R = 6371
-        dlat = math.radians(lat2 - lat1)
-        dlon = math.radians(lon2 - lon1)
-        a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
-        return R * 2 * math.asin(math.sqrt(a))
-
-    # 시간순 정렬
+def _group_files_by_location(media_files, distance_threshold_km=2.0):
+    """GPS 기반으로 파일을 위치 그룹으로 묶기 (공통 로직)."""
     media_files.sort(key=lambda m: m.get("datetime") or "")
 
     groups = []
@@ -134,15 +131,13 @@ def group_by_location(media_files: list[dict], distance_threshold_km: float = 2.
             }
             continue
 
-        # GPS가 있으면 거리로 비교
         if lat and lon and current_group["lat"] and current_group["lon"]:
-            dist = haversine(current_group["lat"], current_group["lon"], lat, lon)
+            dist = _haversine(current_group["lat"], current_group["lon"], lat, lon)
             if dist > distance_threshold_km:
                 groups.append(current_group)
                 current_group = {"location_name": None, "lat": lat, "lon": lon, "files": [media]}
                 continue
 
-        # GPS가 없으면 현재 그룹에 추가
         current_group["files"].append(media)
         if lat and lon and current_group["lat"] is None:
             current_group["lat"] = lat
@@ -151,11 +146,32 @@ def group_by_location(media_files: list[dict], distance_threshold_km: float = 2.
     if current_group and current_group["files"]:
         groups.append(current_group)
 
-    # 각 그룹에 장소명 추가
-    for group in groups:
-        if group["lat"] and group["lon"]:
+    return groups
+
+
+def _add_location_names(groups, parallel=False):
+    """그룹에 장소명과 날짜 범위를 추가."""
+    # 역지오코딩 (병렬 가능)
+    groups_needing_geocode = [g for g in groups if g["lat"] and g["lon"]]
+
+    if parallel and len(groups_needing_geocode) > 1:
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            futures = {
+                pool.submit(reverse_geocode, g["lat"], g["lon"]): g
+                for g in groups_needing_geocode
+            }
+            for future in futures:
+                group = futures[future]
+                try:
+                    group["location_name"] = future.result(timeout=10)
+                except Exception:
+                    group["location_name"] = "알 수 없는 장소"
+    else:
+        for group in groups_needing_geocode:
             group["location_name"] = reverse_geocode(group["lat"], group["lon"])
-        else:
+
+    for group in groups:
+        if not group.get("location_name"):
             group["location_name"] = "알 수 없는 장소"
 
         dates = [f.get("datetime", "") for f in group["files"] if f.get("datetime")]
@@ -166,3 +182,15 @@ def group_by_location(media_files: list[dict], distance_threshold_km: float = 2.
         print(f"  - {g['location_name']} ({len(g['files'])}개 파일, {g['date_range']})")
 
     return groups
+
+
+def group_by_location(media_files: list[dict], distance_threshold_km: float = 2.0) -> list[dict]:
+    """미디어를 장소별로 그룹핑 (EXIF 기반, 순차 역지오코딩)."""
+    groups = _group_files_by_location(media_files, distance_threshold_km)
+    return _add_location_names(groups, parallel=False)
+
+
+def group_by_location_from_drive(media_files: list[dict], distance_threshold_km: float = 2.0) -> list[dict]:
+    """Drive 메타데이터 기반 그룹핑 (GPS/날짜 이미 포함, 병렬 역지오코딩)."""
+    groups = _group_files_by_location(media_files, distance_threshold_km)
+    return _add_location_names(groups, parallel=True)

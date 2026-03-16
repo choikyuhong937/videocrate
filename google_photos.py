@@ -7,6 +7,7 @@
 import os
 import requests
 from urllib.parse import urlencode
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -71,20 +72,13 @@ def get_user_info(access_token):
 # ─── Drive API: 날짜 기반 사진 조회 ───
 
 def list_photos_by_date(access_token, date_from, date_to, max_items=500):
-    """Google Drive에서 날짜 범위로 사진/영상을 조회.
-
-    Args:
-        access_token: OAuth 액세스 토큰
-        date_from: 시작일 (YYYY-MM-DD)
-        date_to: 종료일 (YYYY-MM-DD)
-        max_items: 최대 조회 수
+    """Google Drive에서 날짜 범위로 사진/영상을 조회 (메타데이터만, 다운로드 없음).
 
     Returns:
-        Drive 파일 목록 [{id, name, mimeType, createdTime, imageMediaMetadata, ...}]
+        Drive 파일 목록 [{id, name, mimeType, createdTime, imageMediaMetadata, thumbnailLink, ...}]
     """
     headers = {"Authorization": f"Bearer {access_token}"}
 
-    # Drive API 쿼리: 이미지/영상 + 날짜 범위 + 휴지통 제외
     query_parts = [
         "(mimeType contains 'image/' or mimeType contains 'video/')",
         f"createdTime >= '{date_from}T00:00:00'",
@@ -129,54 +123,91 @@ def list_photos_by_date(access_token, date_from, date_to, max_items=500):
     return all_items
 
 
-def download_drive_files(access_token, drive_files, download_dir):
-    """Drive 파일을 로컬에 다운로드.
+def drive_files_to_media(drive_files):
+    """Drive API 응답을 media_files 형식으로 변환 (다운로드 없이 메타데이터만).
+
+    Drive의 imageMediaMetadata에서 GPS/날짜를 직접 추출하여 EXIF 파싱 불필요.
+    """
+    media_files = []
+    for item in drive_files:
+        mime = item.get("mimeType", "")
+        file_type = "video" if "video" in mime else "image"
+        meta = item.get("imageMediaMetadata", {})
+        location = meta.get("location", {})
+
+        lat = location.get("latitude")
+        lon = location.get("longitude")
+        creation_time = item.get("createdTime", item.get("modifiedTime", ""))
+
+        media_files.append({
+            "drive_id": item["id"],
+            "filename": item.get("name", "photo.jpg"),
+            "path": None,  # 아직 다운로드 안 됨
+            "type": file_type,
+            "modified_time": creation_time,
+            "datetime": creation_time,
+            "lat": lat,
+            "lon": lon,
+            "location_name": "",
+            "thumbnailLink": item.get("thumbnailLink", ""),
+            "size": int(item.get("size", 0)),
+        })
+    return media_files
+
+
+def download_drive_files(access_token, media_files, download_dir, max_workers=8):
+    """media_files의 drive_id로 실제 파일을 병렬 다운로드.
+
+    Args:
+        media_files: drive_files_to_media() 결과 (drive_id 필드 필요)
+        max_workers: 동시 다운로드 스레드 수
 
     Returns:
-        fetcher 호환 형식의 미디어 파일 리스트
+        다운로드된 파일 수
     """
     os.makedirs(download_dir, exist_ok=True)
     headers = {"Authorization": f"Bearer {access_token}"}
-    downloaded = []
 
-    for idx, item in enumerate(drive_files):
-        try:
-            file_id = item["id"]
-            mime = item.get("mimeType", "")
-            filename = item.get("name", f"photo_{idx}.jpg")
+    def _download_one(idx, item):
+        drive_id = item.get("drive_id")
+        if not drive_id:
+            return False
+        filename = item["filename"]
+        file_path = os.path.join(download_dir, filename)
 
-            # 중복 파일명 처리
+        # 중복 파일명 처리
+        if os.path.exists(file_path):
+            name, ext = os.path.splitext(filename)
+            filename = f"{name}_{idx}{ext}"
             file_path = os.path.join(download_dir, filename)
-            if os.path.exists(file_path):
-                name, ext = os.path.splitext(filename)
-                filename = f"{name}_{idx}{ext}"
-                file_path = os.path.join(download_dir, filename)
 
-            file_type = "video" if "video" in mime else "image"
-
-            # Drive API로 파일 다운로드
-            dl_url = f"{DRIVE_API_BASE}/files/{file_id}?alt=media"
+        try:
+            dl_url = f"{DRIVE_API_BASE}/files/{drive_id}?alt=media"
             resp = requests.get(dl_url, headers=headers, timeout=120, stream=True)
             resp.raise_for_status()
 
             with open(file_path, "wb") as f:
-                for chunk in resp.iter_content(8192):
+                for chunk in resp.iter_content(32768):
                     f.write(chunk)
 
-            creation_time = item.get("createdTime", item.get("modifiedTime", ""))
-
-            downloaded.append({
-                "path": file_path,
-                "filename": filename,
-                "type": file_type,
-                "modified_time": creation_time,
-            })
-
-            if (idx + 1) % 20 == 0:
-                print(f"[drive] {idx + 1}/{len(drive_files)} 다운로드 완료")
-
+            item["path"] = file_path
+            item["filename"] = filename
+            return True
         except Exception as e:
-            print(f"[drive] 다운로드 실패: {item.get('name', '?')} - {e}")
+            print(f"[drive] 다운로드 실패: {item.get('filename', '?')} - {e}")
+            return False
 
-    print(f"[drive] 총 {len(downloaded)}/{len(drive_files)} 다운로드 완료")
-    return downloaded
+    success = 0
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(_download_one, i, item): i
+            for i, item in enumerate(media_files)
+        }
+        for future in as_completed(futures):
+            if future.result():
+                success += 1
+                if success % 20 == 0:
+                    print(f"[drive] {success}/{len(media_files)} 다운로드 완료")
+
+    print(f"[drive] 총 {success}/{len(media_files)} 다운로드 완료")
+    return success
