@@ -98,7 +98,6 @@ def list_photos_by_date(access_token, date_from, date_to, max_items=500):
             "fields": fields,
             "pageSize": min(100, max_items - len(all_items)),
             "orderBy": "createdTime",
-            "spaces": "photos",
         }
         if page_token:
             params["pageToken"] = page_token
