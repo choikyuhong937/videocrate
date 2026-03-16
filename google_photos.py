@@ -1,6 +1,7 @@
-"""Google OAuth 2.0 + Photos Library API 연동 모듈.
+"""Google OAuth 2.0 + Photos Picker API 연동 모듈.
 
-흐름: OAuth 로그인 → Photos Library API로 날짜 기반 사진 조회 → 다운로드
+흐름: OAuth 로그인 → Picker로 사진 선택 → 다운로드 → AI 분류
+(Photos Library API 2025-03-31 폐지 → Picker API가 유일한 접근 방법)
 """
 
 import os
@@ -11,10 +12,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
-PHOTOS_API_BASE = "https://photoslibrary.googleapis.com/v1"
+PICKER_API_BASE = "https://photospicker.googleapis.com/v1"
 
 SCOPES = [
-    "https://www.googleapis.com/auth/photoslibrary.readonly",
+    "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
 ]
@@ -68,58 +69,47 @@ def get_user_info(access_token):
     return resp.json()
 
 
-# ─── Photos Library API: 날짜 기반 사진 조회 ───
+# ─── Photos Picker API ───
 
-def list_photos_by_date(access_token, date_from, date_to, max_items=500):
-    """Google Photos Library API로 날짜 범위의 사진/영상을 조회.
+def create_picker_session(access_token):
+    """Picker 세션 생성 → pickerUri 반환."""
+    resp = requests.post(
+        f"{PICKER_API_BASE}/sessions",
+        headers={"Authorization": f"Bearer {access_token}",
+                 "Content-Type": "application/json"},
+        json={},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
-    Args:
-        date_from: "YYYY-MM-DD"
-        date_to: "YYYY-MM-DD"
 
-    Returns:
-        Photos API mediaItems 리스트
-    """
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-    }
+def poll_picker_session(access_token, session_id):
+    """Picker 세션 폴링 (사용자 선택 완료 확인)."""
+    resp = requests.get(
+        f"{PICKER_API_BASE}/sessions/{session_id}",
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
-    # 날짜 파싱
-    from_parts = date_from.split("-")
-    to_parts = date_to.split("-")
 
-    body = {
-        "pageSize": min(100, max_items),
-        "filters": {
-            "dateFilter": {
-                "ranges": [{
-                    "startDate": {
-                        "year": int(from_parts[0]),
-                        "month": int(from_parts[1]),
-                        "day": int(from_parts[2]),
-                    },
-                    "endDate": {
-                        "year": int(to_parts[0]),
-                        "month": int(to_parts[1]),
-                        "day": int(to_parts[2]),
-                    },
-                }]
-            }
-        },
-    }
-
+def list_picker_media_items(access_token, session_id):
+    """선택된 미디어 아이템 목록 조회."""
     all_items = []
     page_token = None
 
-    while len(all_items) < max_items:
+    while True:
+        url = f"{PICKER_API_BASE}/sessions/{session_id}/mediaItems"
+        params = {"pageSize": 100}
         if page_token:
-            body["pageToken"] = page_token
+            params["pageToken"] = page_token
 
-        resp = requests.post(
-            f"{PHOTOS_API_BASE}/mediaItems:search",
-            headers=headers,
-            json=body,
+        resp = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {access_token}"},
+            params=params,
             timeout=30,
         )
         resp.raise_for_status()
@@ -132,23 +122,36 @@ def list_photos_by_date(access_token, date_from, date_to, max_items=500):
         if not page_token:
             break
 
-    print(f"[photos] {len(all_items)}개 미디어 항목 조회됨 ({date_from} ~ {date_to})")
+    print(f"[picker] {len(all_items)}개 미디어 아이템 조회됨")
     return all_items
 
 
-def photos_to_media(photo_items):
-    """Photos Library API 응답을 media_files 형식으로 변환."""
-    media_files = []
-    for item in photo_items:
-        meta = item.get("mediaMetadata", {})
-        creation_time = meta.get("creationTime", "")
-        mime = item.get("mimeType", "")
-        file_type = "video" if "video" in mime else "image"
+def delete_picker_session(access_token, session_id):
+    """Picker 세션 삭제."""
+    try:
+        requests.delete(
+            f"{PICKER_API_BASE}/sessions/{session_id}",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+    except Exception:
+        pass
 
-        # Photos API에서 GPS는 제공하지 않음 (EXIF 다운로드 후 추출 필요)
+
+def picker_items_to_media(picker_items):
+    """Picker API 응답을 media_files 형식으로 변환."""
+    media_files = []
+    for item in picker_items:
+        media_type = item.get("type", "PHOTO")
+        file_type = "video" if media_type == "VIDEO" else "image"
+
+        # Picker API mediaItem 구조
+        creation_time = item.get("createTime", "")
+        mime = item.get("mimeType", "image/jpeg")
+
         media_files.append({
-            "photo_id": item["id"],
-            "filename": item.get("filename", "photo.jpg"),
+            "picker_id": item.get("id", ""),
+            "filename": item.get("id", "photo") + (".mp4" if file_type == "video" else ".jpg"),
             "path": None,
             "type": file_type,
             "modified_time": creation_time,
@@ -156,15 +159,14 @@ def photos_to_media(photo_items):
             "lat": None,
             "lon": None,
             "location_name": "",
-            "baseUrl": item.get("baseUrl", ""),
-            "width": int(meta.get("width", 0)),
-            "height": int(meta.get("height", 0)),
+            "baseUrl": item.get("mediaFile", {}).get("baseUrl", ""),
+            "mimeType": mime,
         })
     return media_files
 
 
-def download_photos(media_files, download_dir, max_workers=8):
-    """Photos Library API의 baseUrl로 실제 파일을 병렬 다운로드.
+def download_picker_photos(media_files, download_dir, max_workers=8):
+    """Picker에서 선택된 사진을 baseUrl로 병렬 다운로드.
 
     Returns:
         다운로드된 파일 수
@@ -185,7 +187,6 @@ def download_photos(media_files, download_dir, max_workers=8):
             file_path = os.path.join(download_dir, filename)
 
         try:
-            # baseUrl + =d 로 원본 다운로드, =w{max}-h{max} 로 리사이즈
             if item["type"] == "video":
                 dl_url = f"{base_url}=dv"
             else:
@@ -202,7 +203,7 @@ def download_photos(media_files, download_dir, max_workers=8):
             item["filename"] = filename
             return True
         except Exception as e:
-            print(f"[photos] 다운로드 실패: {item.get('filename', '?')} - {e}")
+            print(f"[picker] 다운로드 실패: {item.get('filename', '?')} - {e}")
             return False
 
     success = 0
@@ -215,7 +216,7 @@ def download_photos(media_files, download_dir, max_workers=8):
             if future.result():
                 success += 1
                 if success % 20 == 0:
-                    print(f"[photos] {success}/{len(media_files)} 다운로드 완료")
+                    print(f"[picker] {success}/{len(media_files)} 다운로드 완료")
 
-    print(f"[photos] 총 {success}/{len(media_files)} 다운로드 완료")
+    print(f"[picker] 총 {success}/{len(media_files)} 다운로드 완료")
     return success
