@@ -314,13 +314,26 @@ async function startPicker() {
     btn.disabled=true; btn.textContent='연결 중...'; hideErr('fetchError');
     try {
         const d = await (await fetch('/api/picker/create-session',{method:'POST'})).json();
+        console.log('[picker create]', JSON.stringify(d));
         if(d.error){showErr('fetchError',d.error);btn.disabled=false;btn.textContent='Google 포토 열기';return;}
         pickerSessionId = d.id;
-        pickerWindow = window.open(d.pickerUri,'googlePhotosPicker','width=800,height=600');
+
+        // 대기 화면 먼저 표시
         document.getElementById('pickerWaitView').style.display='';
         document.getElementById('pickerMainView').style.display='none';
+
+        // Picker 열기 (팝업 또는 새 탭)
+        pickerWindow = window.open(d.pickerUri, '_blank');
+        if (!pickerWindow) {
+            // 팝업 차단 시 현재 탭에서 열기
+            window.location.href = d.pickerUri;
+            return;
+        }
+
+        // 폴링 시작
         pollPicker();
     } catch(e) {
+        console.error('[picker start error]', e);
         showErr('fetchError','연결 실패. 다시 시도해주세요.');
         btn.disabled=false; btn.textContent='Google 포토 열기';
     }
@@ -329,20 +342,21 @@ async function startPicker() {
 async function pollPicker() {
     try {
         const d = await (await fetch(`/api/picker/poll/${pickerSessionId}`)).json();
+        console.log('[picker poll]', JSON.stringify(d));
         if(d.error){showErr('fetchError',d.error);resetPickerUI();return;}
         if(d.mediaItemsSet){
             document.getElementById('pickerWaitView').style.display='none';
             document.getElementById('fetchingView').style.display='';
             startPickerFetch(); return;
         }
-        if(pickerWindow && pickerWindow.closed){
-            const d2 = await (await fetch(`/api/picker/poll/${pickerSessionId}`)).json();
-            if(d2.mediaItemsSet){document.getElementById('pickerWaitView').style.display='none';document.getElementById('fetchingView').style.display='';startPickerFetch();return;}
-            resetPickerUI(); return;
-        }
+        // 창이 닫혀도 계속 폴링 (새 탭은 .closed가 불안정)
+        // 30분 타임아웃까지 계속 폴링
         const iv = d.pollingConfig?.pollInterval ? parseInt(d.pollingConfig.pollInterval)*1000 : 2000;
         pickerPollTimer = setTimeout(pollPicker, Math.max(iv,1000));
-    } catch(e) { pickerPollTimer = setTimeout(pollPicker, 3000); }
+    } catch(e) {
+        console.log('[picker poll error]', e);
+        pickerPollTimer = setTimeout(pollPicker, 3000);
+    }
 }
 
 async function startPickerFetch() {
