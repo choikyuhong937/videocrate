@@ -11,7 +11,7 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "tripvideo-secret-change-me")
 
 # Video defaults
-DEFAULT_RESOLUTION = (1920, 1080)
+DEFAULT_RESOLUTION = (1280, 720)
 DEFAULT_PHOTO_DURATION = 4  # seconds per photo
 DEFAULT_MAX_PHOTOS = 30
 DEFAULT_LANG = "ko"

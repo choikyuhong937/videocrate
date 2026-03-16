@@ -69,6 +69,7 @@ def generate_video(
                 # zoompan: 느리게 줌인하면서 약간 패닝
                 cmd = [
                     "ffmpeg", "-y",
+                    "-threads", "2",
                     "-loop", "1",
                     "-i", prepared,
                     "-vf", (
@@ -79,7 +80,7 @@ def generate_video(
                     ),
                     "-t", str(duration),
                     "-c:v", "libx264",
-                    "-preset", "fast",
+                    "-preset", "ultrafast",
                     "-pix_fmt", "yuv420p",
                     clip_path,
                 ]
@@ -90,11 +91,12 @@ def generate_video(
                 # 영상 클립: 리사이징 + 트리밍
                 cmd = [
                     "ffmpeg", "-y",
+                    "-threads", "2",
                     "-i", media["path"],
                     "-t", str(duration),
                     "-vf", f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
                     "-c:v", "libx264",
-                    "-preset", "fast",
+                    "-preset", "ultrafast",
                     "-an",
                     "-pix_fmt", "yuv420p",
                     clip_path,
@@ -117,11 +119,10 @@ def generate_video(
         merged_path = os.path.join(tmpdir, "merged.mp4")
         cmd = [
             "ffmpeg", "-y",
+            "-threads", "2",
             "-f", "concat", "-safe", "0",
             "-i", concat_list,
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-pix_fmt", "yuv420p",
+            "-c", "copy",
             merged_path,
         ]
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
@@ -130,6 +131,7 @@ def generate_video(
         print("[video] 자막 합성 중...")
         final_cmd = [
             "ffmpeg", "-y",
+            "-threads", "2",
             "-i", merged_path,
         ]
 
