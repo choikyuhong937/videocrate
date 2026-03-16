@@ -1,7 +1,7 @@
-"""Google Photos OAuth 2.0 + Picker API 연동 모듈.
+"""Google OAuth 2.0 + Drive API 연동 모듈.
 
-흐름: OAuth 로그인 → Picker 세션 생성 → 사용자 사진 선택 → 다운로드
-(Photos Library API는 2025-03-31 폐지 → Picker API로 대체)
+흐름: OAuth 로그인 → Drive API로 날짜 기반 사진 조회 → 다운로드
+(Photos Library API는 2025-03-31 폐지 → Drive API로 대체)
 """
 
 import os
@@ -11,10 +11,10 @@ from urllib.parse import urlencode
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
-PICKER_API_BASE = "https://photospicker.googleapis.com/v1"
+DRIVE_API_BASE = "https://www.googleapis.com/drive/v3"
 
 SCOPES = [
-    "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
+    "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
 ]
@@ -68,106 +68,82 @@ def get_user_info(access_token):
     return resp.json()
 
 
-# ─── Picker API ───
+# ─── Drive API: 날짜 기반 사진 조회 ───
 
-def create_picker_session(access_token):
-    """Picker 세션을 생성하고 pickerUri와 sessionId를 반환."""
-    resp = requests.post(
-        f"{PICKER_API_BASE}/sessions",
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        },
-        json={},
-        timeout=15,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    return {
-        "id": data.get("id", ""),
-        "pickerUri": data.get("pickerUri", ""),
-        "pollingConfig": data.get("pollingConfig", {}),
-        "mediaItemsSet": data.get("mediaItemsSet", False),
-    }
+def list_photos_by_date(access_token, date_from, date_to, max_items=500):
+    """Google Drive에서 날짜 범위로 사진/영상을 조회.
 
+    Args:
+        access_token: OAuth 액세스 토큰
+        date_from: 시작일 (YYYY-MM-DD)
+        date_to: 종료일 (YYYY-MM-DD)
+        max_items: 최대 조회 수
 
-def poll_picker_session(access_token, session_id):
-    """Picker 세션 상태를 조회 (사용자가 사진 선택을 완료했는지 확인)."""
-    resp = requests.get(
-        f"{PICKER_API_BASE}/sessions/{session_id}",
-        headers={"Authorization": f"Bearer {access_token}"},
-        timeout=15,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    return {
-        "mediaItemsSet": data.get("mediaItemsSet", False),
-        "pollingConfig": data.get("pollingConfig", {}),
-    }
+    Returns:
+        Drive 파일 목록 [{id, name, mimeType, createdTime, imageMediaMetadata, ...}]
+    """
+    headers = {"Authorization": f"Bearer {access_token}"}
 
+    # Drive API 쿼리: 이미지/영상 + 날짜 범위 + 휴지통 제외
+    query_parts = [
+        "(mimeType contains 'image/' or mimeType contains 'video/')",
+        f"createdTime >= '{date_from}T00:00:00'",
+        f"createdTime <= '{date_to}T23:59:59'",
+        "trashed = false",
+    ]
+    query = " and ".join(query_parts)
 
-def list_picker_media_items(access_token, session_id):
-    """Picker 세션에서 선택된 미디어 아이템 목록을 조회."""
+    fields = "nextPageToken,files(id,name,mimeType,createdTime,modifiedTime,imageMediaMetadata,size,thumbnailLink)"
+
     all_items = []
     page_token = None
 
-    while True:
-        params = {"sessionId": session_id, "pageSize": 100}
+    while len(all_items) < max_items:
+        params = {
+            "q": query,
+            "fields": fields,
+            "pageSize": min(100, max_items - len(all_items)),
+            "orderBy": "createdTime",
+            "spaces": "photos",
+        }
         if page_token:
             params["pageToken"] = page_token
 
         resp = requests.get(
-            f"{PICKER_API_BASE}/mediaItems",
-            headers={"Authorization": f"Bearer {access_token}"},
+            f"{DRIVE_API_BASE}/files",
+            headers=headers,
             params=params,
             timeout=30,
         )
         resp.raise_for_status()
         data = resp.json()
 
-        items = data.get("mediaItems", [])
-        all_items.extend(items)
+        files = data.get("files", [])
+        all_items.extend(files)
 
         page_token = data.get("nextPageToken")
         if not page_token:
             break
 
-    print(f"[picker] {len(all_items)}개 미디어 항목 선택됨")
+    print(f"[drive] {len(all_items)}개 미디어 항목 조회됨 ({date_from} ~ {date_to})")
     return all_items
 
 
-def delete_picker_session(access_token, session_id):
-    """Picker 세션 삭제 (정리)."""
-    try:
-        requests.delete(
-            f"{PICKER_API_BASE}/sessions/{session_id}",
-            headers={"Authorization": f"Bearer {access_token}"},
-            timeout=10,
-        )
-    except Exception as e:
-        print(f"[picker] 세션 삭제 실패 (무시): {e}")
+def download_drive_files(access_token, drive_files, download_dir):
+    """Drive 파일을 로컬에 다운로드.
 
-
-def download_media(media_items, download_dir):
-    """미디어 아이템을 로컬에 다운로드.
-
-    Picker API의 mediaItems 형식에 맞게 처리.
     Returns:
         fetcher 호환 형식의 미디어 파일 리스트
     """
     os.makedirs(download_dir, exist_ok=True)
+    headers = {"Authorization": f"Bearer {access_token}"}
     downloaded = []
 
-    for idx, item in enumerate(media_items):
+    for idx, item in enumerate(drive_files):
         try:
-            # Picker API 응답 형식: mediaFile.baseUrl
-            media_file = item.get("mediaFile", {})
-            base_url = media_file.get("baseUrl") or item.get("baseUrl")
-            if not base_url:
-                continue
-
-            mime = media_file.get("mimeType", item.get("mimeType", ""))
-            filename = media_file.get("filename", item.get("filename", f"photo_{idx}.jpg"))
+            file_id = item["id"]
+            mime = item.get("mimeType", "")
+            filename = item.get("name", f"photo_{idx}.jpg")
 
             # 중복 파일명 처리
             file_path = os.path.join(download_dir, filename)
@@ -176,25 +152,18 @@ def download_media(media_items, download_dir):
                 filename = f"{name}_{idx}{ext}"
                 file_path = os.path.join(download_dir, filename)
 
-            if "video" in mime:
-                dl_url = f"{base_url}=dv"
-                file_type = "video"
-            else:
-                dl_url = f"{base_url}=d"
-                file_type = "image"
+            file_type = "video" if "video" in mime else "image"
 
-            resp = requests.get(dl_url, timeout=120, stream=True)
+            # Drive API로 파일 다운로드
+            dl_url = f"{DRIVE_API_BASE}/files/{file_id}?alt=media"
+            resp = requests.get(dl_url, headers=headers, timeout=120, stream=True)
             resp.raise_for_status()
 
             with open(file_path, "wb") as f:
                 for chunk in resp.iter_content(8192):
                     f.write(chunk)
 
-            # Picker API: createTime은 최상위 또는 mediaFile.mediaMetadata 안에 있음
-            creation_time = item.get("createTime", "")
-            metadata = media_file.get("mediaMetadata", {})
-            if not creation_time:
-                creation_time = metadata.get("creationTime", "")
+            creation_time = item.get("createdTime", item.get("modifiedTime", ""))
 
             downloaded.append({
                 "path": file_path,
@@ -204,10 +173,10 @@ def download_media(media_items, download_dir):
             })
 
             if (idx + 1) % 20 == 0:
-                print(f"[picker] {idx + 1}/{len(media_items)} 다운로드 완료")
+                print(f"[drive] {idx + 1}/{len(drive_files)} 다운로드 완료")
 
         except Exception as e:
-            print(f"[picker] 다운로드 실패: {item.get('filename', '?')} - {e}")
+            print(f"[drive] 다운로드 실패: {item.get('name', '?')} - {e}")
 
-    print(f"[picker] 총 {len(downloaded)}/{len(media_items)} 다운로드 완료")
+    print(f"[drive] 총 {len(downloaded)}/{len(drive_files)} 다운로드 완료")
     return downloaded

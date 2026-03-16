@@ -126,10 +126,6 @@
         .mt16 { margin-top:16px; }
         .link { color:var(--accent-l); text-decoration:none; font-size:13px; }
 
-        /* ── Divider ── */
-        .divider { display:flex; align-items:center; gap:12px; margin:20px 0; color:var(--dim); font-size:12px; }
-        .divider::before, .divider::after { content:''; flex:1; height:1px; background:var(--border); }
-
         /* ── Fetch progress ── */
         .fetch-progress { text-align:center; padding:24px 0; }
         .fetch-progress .emoji { font-size:48px; margin-bottom:16px; animation: bounce 1.5s ease infinite; }
@@ -151,6 +147,23 @@
         .select-all-btn { background:none; border:1px solid var(--border); color:var(--accent-l); font-size:12px; padding:6px 14px; border-radius:16px; cursor:pointer; }
         .select-all-btn:active { background:var(--accent-bg); }
         .trip-count { font-size:13px; color:var(--dim); }
+
+        /* ── Date picker ── */
+        .date-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
+        .date-row input[type="date"] {
+            width:100%; padding:14px 12px; background:var(--surface2); border:1.5px solid var(--border);
+            border-radius:10px; color:var(--text); font-size:15px; outline:none;
+            -webkit-appearance:none; appearance:none; color-scheme:dark;
+        }
+        .date-row input[type="date"]:focus { border-color:var(--accent); }
+        .date-presets { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+        .date-preset {
+            padding:8px 14px; background:var(--surface2); border:1px solid var(--border);
+            border-radius:20px; color:var(--dim); font-size:12px; cursor:pointer;
+            transition:all 0.2s;
+        }
+        .date-preset:active { background:var(--accent-bg); color:var(--accent-l); border-color:var(--accent); }
+        .date-preset.active { background:var(--accent-bg); color:var(--accent-l); border-color:var(--accent); }
     </style>
 </head>
 <body>
@@ -187,32 +200,42 @@
         <div class="spacer"></div>
     </div>
 
-    <!-- ===== 1. 구글 포토 연동 ===== -->
+    <!-- ===== 1. 날짜 선택 & 사진 조회 ===== -->
     <div id="fetchScreen" class="screen">
         <div class="user-bar" id="userBar"></div>
 
-        <!-- 메인 버튼 -->
-        <div id="pickerMainView">
-            <div style="text-align:center; padding:40px 0 24px;">
-                <div style="font-size:48px; margin-bottom:16px;">&#128248;</div>
-                <div class="section-title" style="margin-bottom:8px;">구글 포토에서 사진을 선택하세요</div>
+        <!-- 날짜 선택 -->
+        <div id="datePickerView">
+            <div style="text-align:center; padding:24px 0 20px;">
+                <div style="font-size:48px; margin-bottom:12px;">&#128197;</div>
+                <div class="section-title" style="margin-bottom:6px;">기간을 선택하세요</div>
                 <p style="font-size:13px; color:var(--dim); line-height:1.6;">
-                    사진을 선택하면 AI가 자동으로<br>
+                    선택한 기간의 사진을 AI가 자동으로<br>
                     여행, 이벤트, 성장기록 등 테마별로 분류합니다
                 </p>
             </div>
-            <button class="btn" id="fetchBtn" onclick="startPicker()">
-                Google 포토 열기
-            </button>
-        </div>
 
-        <!-- Picker 대기 중 -->
-        <div id="pickerWaitView" style="display:none">
-            <div class="fetch-progress">
-                <div class="emoji">&#128247;</div>
-                <div class="spinner spinner-lg"></div>
-                <h3 id="pickerWaitMsg">Google 포토에서 사진을 선택해주세요</h3>
-                <p>선택을 완료하면 AI가 테마별로 분류합니다</p>
+            <div class="card">
+                <div class="date-presets">
+                    <button class="date-preset" onclick="setDatePreset(7)">최근 1주</button>
+                    <button class="date-preset" onclick="setDatePreset(30)">최근 1개월</button>
+                    <button class="date-preset" onclick="setDatePreset(90)">최근 3개월</button>
+                    <button class="date-preset" onclick="setDatePreset(180)">최근 6개월</button>
+                    <button class="date-preset" onclick="setDatePreset(365)">최근 1년</button>
+                </div>
+                <div class="date-row">
+                    <div>
+                        <label class="form-label">시작일</label>
+                        <input type="date" id="dateFrom">
+                    </div>
+                    <div>
+                        <label class="form-label">종료일</label>
+                        <input type="date" id="dateTo">
+                    </div>
+                </div>
+                <button class="btn" id="fetchBtn" onclick="startFetchByDate()" disabled>
+                    날짜를 선택하세요
+                </button>
             </div>
         </div>
 
@@ -221,7 +244,7 @@
             <div class="fetch-progress">
                 <div class="emoji">&#129302;</div>
                 <div class="spinner spinner-lg"></div>
-                <h3 id="fetchMsg">AI가 사진을 분석하고 있습니다...</h3>
+                <h3 id="fetchMsg">사진을 검색하고 있습니다...</h3>
                 <p>여행, 이벤트, 성장기록 등을 자동 분류 중</p>
             </div>
         </div>
@@ -229,7 +252,7 @@
         <div class="error-msg" id="fetchError"></div>
     </div>
 
-    <!-- ===== 2. 여행 선택 ===== -->
+    <!-- ===== 2. 테마 선택 ===== -->
     <div id="tripScreen" class="screen">
         <div class="user-bar" id="userBar2"></div>
 
@@ -239,7 +262,7 @@
             <p id="analyzingMsg">사진을 분석하고 있어요...</p>
         </div>
 
-        <!-- 여행 목록 -->
+        <!-- 테마 목록 -->
         <div id="tripsView" style="display:none">
             <div class="select-all-bar">
                 <div class="section-title" style="margin-bottom:0">어떤 테마를 영상으로?</div>
@@ -305,7 +328,7 @@
 
 <script>
 // ── State ──
-let user = null;    // {email, name, picture, apiKey}
+let user = null;
 let uploadId = null;
 let currentJobId = null;
 let selectedTrips = new Set();
@@ -339,11 +362,7 @@ function renderUserBar() {
 function doGoogleLogin() {
     const apiKey = document.getElementById('loginApiKey').value.trim();
     if (!apiKey) { alert('Gemini API Key를 먼저 입력해주세요.'); return; }
-
-    // API key를 localStorage에 저장
     localStorage.setItem('tv_api_key', apiKey);
-
-    // Google OAuth 시작 - API key를 state로 전달
     window.location.href = `/auth/google?api_key=${encodeURIComponent(apiKey)}`;
 }
 
@@ -356,18 +375,15 @@ function doLogout() {
 function goHome() {
     uploadId = null; currentJobId = null;
     selectedTrips.clear(); allTrips = [];
-    pickerSessionId = null; pickerWindow = null;
-    if (pickerPollTimer) { clearTimeout(pickerPollTimer); pickerPollTimer = null; }
     showScreen('fetchScreen');
     document.getElementById('fetchingView').style.display = 'none';
-    document.getElementById('pickerWaitView').style.display = 'none';
-    resetPickerUI();
+    document.getElementById('datePickerView').style.display = '';
     hideErr('fetchError');
+    updateFetchBtn();
 }
 
 // ── Init: Check login state ──
 async function checkLogin() {
-    // URL 파라미터 확인
     const params = new URLSearchParams(window.location.search);
 
     if (params.get('error')) {
@@ -383,7 +399,6 @@ async function checkLogin() {
         return;
     }
 
-    // 서버에서 로그인 상태 확인
     try {
         const resp = await fetch('/api/user');
         const data = await resp.json();
@@ -399,13 +414,13 @@ async function checkLogin() {
             renderUserBar();
             showScreen('fetchScreen');
             history.replaceState({}, '', '/tripvideo');
+            initDatePicker();
             return;
         }
     } catch(e) {
         console.log('Login check failed:', e);
     }
 
-    // 로컬 저장 API key 복원
     const savedKey = localStorage.getItem('tv_api_key');
     if (savedKey) {
         document.getElementById('loginApiKey').value = savedKey;
@@ -419,127 +434,93 @@ checkLogin();
 // ── PW Toggle ──
 function togglePw(id) { const i = document.getElementById(id); i.type = i.type === 'password' ? 'text' : 'password'; }
 
-// ── Google Photos Picker ──
-let pickerSessionId = null;
-let pickerWindow = null;
-let pickerPollTimer = null;
+// ── Date Picker ──
+function initDatePicker() {
+    const today = new Date();
+    const dateTo = document.getElementById('dateTo');
+    const dateFrom = document.getElementById('dateFrom');
+    dateTo.value = formatDate(today);
+    dateTo.max = formatDate(today);
+    dateFrom.max = formatDate(today);
 
-async function startPicker() {
+    dateFrom.addEventListener('change', updateFetchBtn);
+    dateTo.addEventListener('change', updateFetchBtn);
+
+    // 기본: 최근 3개월
+    setDatePreset(90);
+}
+
+function formatDate(d) {
+    return d.toISOString().split('T')[0];
+}
+
+function setDatePreset(days) {
+    const today = new Date();
+    const from = new Date(today);
+    from.setDate(from.getDate() - days);
+
+    document.getElementById('dateFrom').value = formatDate(from);
+    document.getElementById('dateTo').value = formatDate(today);
+
+    // 프리셋 버튼 활성화
+    document.querySelectorAll('.date-preset').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+
+    updateFetchBtn();
+}
+
+function updateFetchBtn() {
+    const from = document.getElementById('dateFrom').value;
+    const to = document.getElementById('dateTo').value;
+    const btn = document.getElementById('fetchBtn');
+
+    if (from && to && from <= to) {
+        btn.disabled = false;
+        btn.textContent = '사진 가져오기';
+    } else {
+        btn.disabled = true;
+        btn.textContent = '날짜를 선택하세요';
+    }
+}
+
+async function startFetchByDate() {
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+
+    if (!dateFrom || !dateTo) { alert('날짜를 선택해주세요.'); return; }
+
     const btn = document.getElementById('fetchBtn');
     btn.disabled = true;
-    btn.textContent = '연결 중...';
+    btn.textContent = '검색 중...';
     hideErr('fetchError');
 
     try {
-        // 1. Picker 세션 생성
-        const r = await fetch('/api/picker/create-session', { method: 'POST' });
-        const d = await r.json();
-
-        if (d.error) {
-            showErr('fetchError', d.error);
-            btn.disabled = false;
-            btn.textContent = 'Google 포토 열기';
-            return;
-        }
-
-        pickerSessionId = d.id;
-        const pickerUri = d.pickerUri;
-
-        // 2. Google Photos Picker를 새 창으로 열기
-        pickerWindow = window.open(pickerUri, 'googlePhotosPicker', 'width=800,height=600');
-
-        // 3. Picker 대기 화면 표시
-        document.getElementById('pickerWaitView').style.display = '';
-        document.getElementById('pickerMainView').style.display = 'none';
-
-        // 4. 폴링 시작 (사용자 선택 완료 대기)
-        pollPicker();
-
-    } catch(e) {
-        showErr('fetchError', '연결 실패. 다시 시도해주세요.');
-        btn.disabled = false;
-        btn.textContent = 'Google 포토 열기';
-    }
-}
-
-async function pollPicker() {
-    try {
-        const r = await fetch(`/api/picker/poll/${pickerSessionId}`);
-        const d = await r.json();
-
-        if (d.error) {
-            showErr('fetchError', d.error);
-            resetPickerUI();
-            return;
-        }
-
-        if (d.mediaItemsSet) {
-            // 사용자가 사진 선택 완료!
-            document.getElementById('pickerWaitView').style.display = 'none';
-            document.getElementById('fetchingView').style.display = '';
-
-            // 선택된 사진 다운로드 시작
-            startPickerFetch();
-            return;
-        }
-
-        // 팝업이 닫혔는지 확인 (사용자가 취소한 경우)
-        if (pickerWindow && pickerWindow.closed) {
-            // 한 번 더 폴링해서 확인 (선택 완료 후 자동 닫힘일 수도 있음)
-            const r2 = await fetch(`/api/picker/poll/${pickerSessionId}`);
-            const d2 = await r2.json();
-            if (d2.mediaItemsSet) {
-                document.getElementById('pickerWaitView').style.display = 'none';
-                document.getElementById('fetchingView').style.display = '';
-                startPickerFetch();
-                return;
-            }
-            // 정말 취소한 경우
-            resetPickerUI();
-            return;
-        }
-
-        // 폴링 간격 (서버 권장값 사용, 기본 2초)
-        const interval = d.pollingConfig?.pollInterval ? parseInt(d.pollingConfig.pollInterval) * 1000 : 2000;
-        pickerPollTimer = setTimeout(pollPicker, Math.max(interval, 1000));
-    } catch(e) {
-        pickerPollTimer = setTimeout(pollPicker, 3000);
-    }
-}
-
-async function startPickerFetch() {
-    try {
-        const r = await fetch('/api/picker/fetch', {
+        const r = await fetch('/api/fetch-by-date', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ picker_session_id: pickerSessionId }),
+            body: JSON.stringify({ date_from: dateFrom, date_to: dateTo }),
         });
         const d = await r.json();
 
         if (d.error) {
             showErr('fetchError', d.error);
-            document.getElementById('fetchingView').style.display = 'none';
-            resetPickerUI();
+            btn.disabled = false;
+            btn.textContent = '사진 가져오기';
             return;
         }
 
         uploadId = d.upload_id;
+
+        // 날짜 선택 숨기고 진행 화면 표시
+        document.getElementById('datePickerView').style.display = 'none';
+        document.getElementById('fetchingView').style.display = '';
+
         pollFetch();
     } catch(e) {
-        showErr('fetchError', '사진 가져오기 실패. 다시 시도해주세요.');
-        document.getElementById('fetchingView').style.display = 'none';
-        resetPickerUI();
+        showErr('fetchError', '연결 실패. 다시 시도해주세요.');
+        btn.disabled = false;
+        btn.textContent = '사진 가져오기';
     }
-}
-
-function resetPickerUI() {
-    document.getElementById('pickerWaitView').style.display = 'none';
-    document.getElementById('pickerMainView').style.display = '';
-    const btn = document.getElementById('fetchBtn');
-    btn.disabled = false;
-    btn.textContent = 'Google 포토 열기';
-    pickerSessionId = null;
-    pickerWindow = null;
 }
 
 async function pollFetch() {
@@ -557,7 +538,8 @@ async function pollFetch() {
         if (d.status === 'error') {
             showErr('fetchError', d.message);
             document.getElementById('fetchingView').style.display = 'none';
-            resetPickerUI();
+            document.getElementById('datePickerView').style.display = '';
+            updateFetchBtn();
             return;
         }
         setTimeout(pollFetch, 1000);
@@ -610,12 +592,10 @@ function toggleTrip(id, card) {
 function toggleSelectAll() {
     const btn = document.getElementById('selectAllBtn');
     if (selectedTrips.size === allTrips.length) {
-        // 전체 해제
         selectedTrips.clear();
         document.querySelectorAll('.trip-card').forEach(c => c.classList.remove('selected'));
         btn.textContent = '전체 선택';
     } else {
-        // 전체 선택
         allTrips.forEach(t => {
             selectedTrips.add(t.id);
             const card = document.getElementById(`trip-${t.id}`);
@@ -680,7 +660,7 @@ function showResult(job) {
     const b = document.getElementById('resultBadges'); let h='';
     if(job.total_files) h+=`<div class="badge">원본 <b>${job.total_files}개</b></div>`;
     if(job.selected_count) h+=`<div class="badge">선별 <b>${job.selected_count}개</b></div>`;
-    if(job.total_groups) h+=`<div class="badge">장소 <b>${job.total_groups}곳</b></div>`;
+    if(job.total_groups) h+=`<div class="badge">테마 <b>${job.total_groups}개</b></div>`;
     b.innerHTML=h;
 }
 

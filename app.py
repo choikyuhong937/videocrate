@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """VideoCrate Web - 여행 영상 자동 생성 웹 앱.
 
-흐름: Google 로그인 → 구글포토 자동 연동 → 여행 카드 선택 → 영상 생성
+흐름: Google 로그인 → 날짜 범위 선택 → Drive API로 사진 자동 조회 → AI 테마 분류 → 영상 생성
 """
 
 import os
@@ -22,9 +22,7 @@ from video import generate_video
 from categorizer import categorize_photos
 from google_photos import (
     get_auth_url, exchange_code, get_user_info,
-    download_media, refresh_access_token,
-    create_picker_session, poll_picker_session,
-    list_picker_media_items, delete_picker_session,
+    refresh_access_token, list_photos_by_date, download_drive_files,
 )
 
 app = Flask(__name__)
@@ -138,62 +136,28 @@ def api_user():
     return jsonify({"logged_in": False})
 
 
-# ─── Google Photos Picker API ───
+# ─── Google Drive: 날짜 기반 사진 조회 ───
 
-@app.route("/api/picker/create-session", methods=["POST"])
-def picker_create_session():
-    """Picker 세션 생성 → pickerUri 반환."""
-    access_token = session.get("google_access_token")
-    if not access_token:
-        return jsonify({"error": "Google 로그인이 필요합니다."}), 401
-
-    try:
-        result = create_picker_session(access_token)
-        # 세션 ID 저장 (나중에 정리용)
-        session["picker_session_id"] = result["id"]
-        return jsonify(result)
-    except Exception as e:
-        print(f"[picker] 세션 생성 에러: {e}")
-        return jsonify({"error": f"Picker 세션 생성 실패: {str(e)}"}), 500
-
-
-@app.route("/api/picker/poll/<picker_session_id>")
-def picker_poll(picker_session_id):
-    """Picker 세션 폴링 (사용자 선택 완료 여부 확인)."""
-    access_token = session.get("google_access_token")
-    if not access_token:
-        return jsonify({"error": "Google 로그인이 필요합니다."}), 401
-
-    try:
-        result = poll_picker_session(access_token, picker_session_id)
-        return jsonify(result)
-    except Exception as e:
-        print(f"[picker] 폴링 에러: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-def fetch_picker_photos(upload_id, access_token, picker_session_id):
-    """Picker에서 선택된 사진을 다운로드하고 여행별로 분류."""
+def fetch_photos_by_date(upload_id, access_token, date_from, date_to, api_key):
+    """Drive API로 날짜 범위의 사진을 조회 → 다운로드 → AI 테마 분류."""
     sess = sessions[upload_id]
     try:
-        # 1단계: 선택된 미디어 목록 조회
+        # 1단계: Drive API로 사진 목록 조회
         sess["status"] = "fetching"
-        sess["message"] = "선택한 사진 정보를 가져오고 있습니다..."
+        sess["message"] = f"{date_from} ~ {date_to} 사진을 검색하고 있습니다..."
 
-        items = list_picker_media_items(access_token, picker_session_id)
+        drive_files = list_photos_by_date(access_token, date_from, date_to)
 
-        if not items:
+        if not drive_files:
             sess["status"] = "error"
-            sess["message"] = "선택된 사진이 없습니다."
+            sess["message"] = "해당 기간에 사진이 없습니다. 다른 날짜를 선택해주세요."
             return
 
-        sess["message"] = f"{len(items)}개 사진을 다운로드하고 있습니다..."
+        sess["message"] = f"{len(drive_files)}개 사진을 다운로드하고 있습니다..."
 
         # 2단계: 다운로드
         download_dir = os.path.join(UPLOAD_DIR, upload_id)
-        os.makedirs(download_dir, exist_ok=True)
-
-        media_files = download_media(items, download_dir)
+        media_files = download_drive_files(access_token, drive_files, download_dir)
 
         if not media_files:
             sess["status"] = "error"
@@ -214,7 +178,6 @@ def fetch_picker_photos(upload_id, access_token, picker_session_id):
         sess["status"] = "categorizing"
         sess["message"] = "AI가 사진을 테마별로 분류하고 있습니다..."
 
-        api_key = session.get("pending_api_key") or config.GEMINI_API_KEY
         theme_cards = categorize_photos(media_files, location_groups, api_key=api_key)
 
         sess["status"] = "ready"
@@ -223,39 +186,39 @@ def fetch_picker_photos(upload_id, access_token, picker_session_id):
         sess["location_groups"] = location_groups
         sess["theme_cards"] = theme_cards
 
-        # Picker 세션 정리
-        delete_picker_session(access_token, picker_session_id)
-
     except Exception as e:
         sess["status"] = "error"
-        sess["message"] = f"구글 포토 연동 중 오류: {str(e)}"
-        print(f"[picker] fetch error: {e}")
+        sess["message"] = f"사진 조회 중 오류: {str(e)}"
+        print(f"[drive] fetch error: {e}")
 
 
-@app.route("/api/picker/fetch", methods=["POST"])
-def picker_fetch():
-    """Picker에서 선택된 사진 다운로드 & 분석 시작."""
+@app.route("/api/fetch-by-date", methods=["POST"])
+def api_fetch_by_date():
+    """날짜 범위로 Google Drive에서 사진 조회 & AI 분류 시작."""
     access_token = session.get("google_access_token")
     if not access_token:
         return jsonify({"error": "Google 로그인이 필요합니다."}), 401
 
     data = request.get_json() or {}
-    picker_session_id = data.get("picker_session_id")
-    if not picker_session_id:
-        return jsonify({"error": "Picker 세션 ID가 없습니다."}), 400
+    date_from = data.get("date_from")
+    date_to = data.get("date_to")
+
+    if not date_from or not date_to:
+        return jsonify({"error": "시작일과 종료일을 선택해주세요."}), 400
 
     upload_id = str(uuid.uuid4())[:8]
     sessions[upload_id] = {
         "status": "fetching",
-        "message": "선택한 사진을 가져오고 있습니다...",
+        "message": "사진을 검색하고 있습니다...",
         "folder": "",
         "uploaded_count": 0,
-        "trips": [],
     }
 
+    api_key = session.get("pending_api_key") or config.GEMINI_API_KEY
+
     thread = threading.Thread(
-        target=fetch_picker_photos,
-        args=(upload_id, access_token, picker_session_id),
+        target=fetch_photos_by_date,
+        args=(upload_id, access_token, date_from, date_to, api_key),
     )
     thread.daemon = True
     thread.start()
@@ -263,40 +226,7 @@ def picker_fetch():
     return jsonify({"upload_id": upload_id})
 
 
-# ─── Phase 1: 업로드 & 여행 분류 (수동 업로드 - fallback) ───
-
-def analyze_uploads(upload_id: str, folder_path: str):
-    """업로드된 사진을 스캔하고 여행별로 자동 분류."""
-    s = sessions[upload_id]
-    try:
-        s["status"] = "scanning"
-        s["message"] = "미디어 파일을 스캔하고 있습니다..."
-        media_files = scan_local_folder(folder_path)
-        if not media_files:
-            s["status"] = "error"
-            s["message"] = "미디어 파일을 찾을 수 없습니다."
-            return
-
-        s["status"] = "analyzing"
-        s["message"] = "GPS/날짜 정보를 분석하고 있습니다..."
-        media_files = enrich_media_with_metadata(media_files)
-        location_groups = group_by_location(media_files)
-
-        # AI 테마 분류
-        s["status"] = "categorizing"
-        s["message"] = "AI가 사진을 테마별로 분류하고 있습니다..."
-        theme_cards = categorize_photos(media_files, location_groups)
-
-        s["status"] = "ready"
-        s["message"] = "테마 분류 완료!"
-        s["media_files"] = media_files
-        s["location_groups"] = location_groups
-        s["theme_cards"] = theme_cards
-
-    except Exception as e:
-        s["status"] = "error"
-        s["message"] = f"분석 중 오류: {str(e)}"
-
+# ─── Pages ───
 
 @app.route("/")
 def root():
@@ -308,45 +238,11 @@ def tripvideo():
     return render_template("index.html")
 
 
-@app.route("/api/upload", methods=["POST"])
-def upload():
-    """사진 업로드 & 여행 자동 분류 시작."""
-    files = request.files.getlist("photos")
-    if not files or all(f.filename == "" for f in files):
-        return jsonify({"error": "사진을 업로드해주세요."}), 400
-
-    upload_id = str(uuid.uuid4())[:8]
-    upload_folder = os.path.join(UPLOAD_DIR, upload_id)
-    os.makedirs(upload_folder, exist_ok=True)
-
-    saved_count = 0
-    for f in files:
-        if f.filename:
-            safe_name = f.filename.replace("/", "_").replace("\\", "_")
-            f.save(os.path.join(upload_folder, safe_name))
-            saved_count += 1
-
-    if saved_count == 0:
-        return jsonify({"error": "유효한 파일이 없습니다."}), 400
-
-    sessions[upload_id] = {
-        "status": "uploading",
-        "message": "업로드 완료, 분석을 시작합니다...",
-        "folder": upload_folder,
-        "uploaded_count": saved_count,
-        "trips": [],
-    }
-
-    thread = threading.Thread(target=analyze_uploads, args=(upload_id, upload_folder))
-    thread.daemon = True
-    thread.start()
-
-    return jsonify({"upload_id": upload_id})
-
+# ─── Analyze Status ───
 
 @app.route("/api/analyze/<upload_id>")
 def analyze_status(upload_id):
-    """업로드 분석 상태 조회."""
+    """분석 상태 조회."""
     s = sessions.get(upload_id)
     if not s:
         return jsonify({"error": "세션을 찾을 수 없습니다."}), 404
@@ -370,10 +266,10 @@ def thumbnail(upload_id, filename):
     return send_file(file_path, mimetype="image/jpeg")
 
 
-# ─── Phase 2: 여행 선택 → 영상 생성 ───
+# ─── Phase 2: 테마 선택 → 영상 생성 ───
 
 def run_pipeline(job_id: str, upload_id: str, selected_trip_ids: list, options: dict):
-    """선택된 여행으로 영상 생성 파이프라인 실행."""
+    """선택된 테마로 영상 생성 파이프라인 실행."""
     job = jobs[job_id]
     s = sessions.get(upload_id)
 
@@ -396,7 +292,7 @@ def run_pipeline(job_id: str, upload_id: str, selected_trip_ids: list, options: 
                 })
         if not selected_groups:
             job["status"] = "error"
-            job["message"] = "선택된 여행이 없습니다."
+            job["message"] = "선택된 테마가 없습니다."
             return
 
         total_files = sum(len(g["files"]) for g in selected_groups)
@@ -447,7 +343,7 @@ def run_pipeline(job_id: str, upload_id: str, selected_trip_ids: list, options: 
 
 @app.route("/api/generate", methods=["POST"])
 def generate():
-    """선택된 여행으로 영상 생성 시작."""
+    """선택된 테마로 영상 생성 시작."""
     data = request.get_json()
     upload_id = data.get("upload_id")
     selected_trips = data.get("selected_trips", [])
@@ -455,7 +351,7 @@ def generate():
     if not upload_id or upload_id not in sessions:
         return jsonify({"error": "세션이 만료되었습니다."}), 400
     if not selected_trips:
-        return jsonify({"error": "여행을 선택해주세요."}), 400
+        return jsonify({"error": "테마를 선택해주세요."}), 400
 
     options = {
         "max_photos": data.get("max_photos", 30),
