@@ -217,11 +217,11 @@
 
             <div class="card">
                 <div class="date-presets">
-                    <button class="date-preset" onclick="setDatePreset(7)">최근 1주</button>
-                    <button class="date-preset" onclick="setDatePreset(30)">최근 1개월</button>
-                    <button class="date-preset" onclick="setDatePreset(90)">최근 3개월</button>
-                    <button class="date-preset" onclick="setDatePreset(180)">최근 6개월</button>
-                    <button class="date-preset" onclick="setDatePreset(365)">최근 1년</button>
+                    <button class="date-preset" onclick="setDatePreset(7,this)">최근 1주</button>
+                    <button class="date-preset" onclick="setDatePreset(30,this)">최근 1개월</button>
+                    <button class="date-preset" onclick="setDatePreset(90,this)">최근 3개월</button>
+                    <button class="date-preset" onclick="setDatePreset(180,this)">최근 6개월</button>
+                    <button class="date-preset" onclick="setDatePreset(365,this)">최근 1년</button>
                 </div>
                 <div class="date-row">
                     <div>
@@ -448,14 +448,15 @@ function initDatePicker() {
     dateTo.addEventListener('change', updateFetchBtn);
 
     // 기본: 최근 3개월
-    setDatePreset(90);
+    const defaultBtn = document.querySelector('.date-preset:nth-child(3)');
+    setDatePreset(90, defaultBtn);
 }
 
 function formatDate(d) {
     return d.toISOString().split('T')[0];
 }
 
-function setDatePreset(days) {
+function setDatePreset(days, el) {
     const today = new Date();
     const from = new Date(today);
     from.setDate(from.getDate() - days);
@@ -465,7 +466,7 @@ function setDatePreset(days) {
 
     // 프리셋 버튼 활성화
     document.querySelectorAll('.date-preset').forEach(b => b.classList.remove('active'));
-    event.target.classList.add('active');
+    if (el) el.classList.add('active');
 
     updateFetchBtn();
 }
