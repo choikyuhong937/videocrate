@@ -173,7 +173,7 @@ def picker_items_to_media(picker_items):
     return media_files
 
 
-def download_picker_photos(media_files, download_dir, max_workers=8):
+def download_picker_photos(media_files, download_dir, access_token=None, max_workers=8):
     """Picker에서 선택된 사진을 baseUrl로 병렬 다운로드.
 
     Returns:
@@ -184,6 +184,7 @@ def download_picker_photos(media_files, download_dir, max_workers=8):
     def _download_one(idx, item):
         base_url = item.get("baseUrl")
         if not base_url:
+            print(f"[picker] baseUrl 없음: {item.get('filename', '?')}")
             return False
 
         filename = item["filename"]
@@ -200,7 +201,11 @@ def download_picker_photos(media_files, download_dir, max_workers=8):
             else:
                 dl_url = f"{base_url}=d"
 
-            resp = requests.get(dl_url, timeout=120, stream=True)
+            headers = {}
+            if access_token:
+                headers["Authorization"] = f"Bearer {access_token}"
+
+            resp = requests.get(dl_url, headers=headers, timeout=120, stream=True)
             resp.raise_for_status()
 
             with open(file_path, "wb") as f:

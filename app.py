@@ -195,7 +195,7 @@ def process_picker_photos(upload_id, access_token, picker_session_id, api_key):
 
         # 2. 다운로드 (병렬)
         download_dir = os.path.join(UPLOAD_DIR, upload_id)
-        downloaded = download_picker_photos(media_files, download_dir)
+        downloaded = download_picker_photos(media_files, download_dir, access_token=access_token)
 
         # 다운로드 실패한 파일 제거
         media_files = [f for f in media_files if f.get("path")]
