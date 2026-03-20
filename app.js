@@ -395,14 +395,15 @@ ${lines}
       "team_tactics": "팀 전체 전술 요약 (2~3문장, 아마추어가 이해하기 쉽게)",
       "key_points": ["핵심 포인트 1", "핵심 포인트 2", "핵심 포인트 3"],
       "diagram": {
-        "players": [
-          {"name":"선수이름","role":"GK","x":50,"y":92}
+        "lines": [
+          ["공격수1","공격수2","공격수3"],
+          ["미드필더1","미드필더2","미드필더3"],
+          ["수비수1","수비수2","수비수3","수비수4"],
+          ["GK이름"]
         ],
-        "arrows": [
-          {"player":"선수이름","ex":85,"ey":25,"label":"오버래핑"}
-        ],
-        "pass_routes": [
-          {"from":"선수A","to":"선수B"}
+        "moves": [
+          {"player":"선수이름","direction":"flank_right","label":"오버래핑"},
+          {"player":"선수이름","direction":"forward","label":"침투"}
         ]
       },
       "starters": [
@@ -417,12 +418,11 @@ ${lines}
   ]
 }
 
-좌표 규칙 (diagram.players):
-- x: 0=왼쪽 터치라인, 50=중앙, 100=오른쪽 터치라인
-- y: 0=상대 골대, 50=하프라인, 100=우리 골대
-- GK: y=90~95, 수비수: y=72~82, 미드필더: y=45~60, 공격수: y=15~35
-- arrows: 공격 시 핵심 이동 2~4개 (윙백 오버래핑, 전방 침투 등)
-- pass_routes: 주요 패스 연결 3~5개 (from/to는 diagram.players의 name과 동일)
+diagram 규칙:
+- lines: 맨 앞 배열이 공격수, 맨 뒤 배열이 GK. 각 배열 안에서 왼쪽→오른쪽 순으로 이름만 나열
+  예) 4-3-3: [["좌윙","CF","우윙"],["좌MF","중MF","우MF"],["좌수","좌CB","우CB","우수"],["GK"]]
+- moves: 2~3개 핵심 움직임만. direction은 "flank_left"(왼쪽 측면돌파), "flank_right"(오른쪽 측면돌파), "forward"(전방침투) 셋 중 하나
+- 선수 이름은 명단 그대로
 
 주의:
 - 4경기 모두 포함 (game: 1, 2, 3, 4)
@@ -505,8 +505,7 @@ function renderResult(d) {
       <div class="diagram-legend">
         <span class="legend-item"><span class="legend-dot"></span> 선수</span>
         <span class="legend-item"><span class="legend-dot gk"></span> GK</span>
-        <span class="legend-item"><span class="legend-line move"></span> 이동</span>
-        <span class="legend-item"><span class="legend-line pass"></span> 패스</span>
+        <span class="legend-item"><span class="legend-line move"></span> 주요 움직임</span>
       </div>` : '';
 
     // 선수별 세부전술
@@ -556,77 +555,81 @@ function renderResult(d) {
 }
 
 // ── 피치 다이어그램 렌더링 ─────────────────────
-function clamp(v, min, max) {
-  return Math.max(min || 0, Math.min(max || 100, v || 50));
+
+// lines[0]=공격수, lines[last]=GK → x,y 자동 계산
+function calcPitchPositions(lines) {
+  const n = lines.length;
+  // Y 프리셋: 라인 수에 따라 상대 골대쪽(y=12)~우리 골대(y=90)
+  const yPresets = {
+    2: [20, 90],
+    3: [20, 55, 90],
+    4: [16, 48, 73, 90],
+    5: [14, 36, 54, 73, 90],
+    6: [12, 30, 45, 57, 73, 90],
+  };
+  const ys = yPresets[n] || lines.map((_, i) => Math.round(16 + 74 * i / (n - 1)));
+  const result = [];
+  lines.forEach((players, li) => {
+    const y = ys[li];
+    const m = players.length;
+    players.forEach((name, pi) => {
+      const x = m === 1 ? 50 : Math.round(12 + 76 * pi / (m - 1));
+      result.push({ name, x, y, isGK: li === n - 1 });
+    });
+  });
+  return result;
 }
 
 function renderPitch(diagram, idx) {
+  const lines = diagram.lines || [];
+  if (!lines.length) return '';
+
+  const positions = calcPitchPositions(lines);
+  const posMap = {};
+  positions.forEach(p => { posMap[p.name] = p; });
+
   // 선수 마커
-  const players = diagram.players || [];
-  const playersHTML = players.map(p => {
-    const isGK = /GK/i.test(p.role || '');
+  const playersHTML = positions.map(p => {
     const ch = (p.name || '?')[0];
-    const x = clamp(p.x, 5, 95);
-    const y = clamp(p.y, 4, 96);
-    return `<div class="pp" style="left:${x}%;top:${y}%">
-      <div class="pp-dot${isGK ? ' gk' : ''}">${escHtml(ch)}</div>
+    return `<div class="pp" style="left:${p.x}%;top:${p.y}%">
+      <div class="pp-dot${p.isGK ? ' gk' : ''}">${escHtml(ch)}</div>
       <div class="pp-label">${escHtml(p.name)}</div>
     </div>`;
   }).join('');
 
-  // 이동 화살표(노란 점선) + 패스 루트(하늘색 실선)
-  const moveArrows = diagram.arrows || [];
-  const passRoutes = diagram.pass_routes || [];
-  let svgContent = '';
-  let arrowLabelsHTML = '';
+  // 이동 화살표
+  const moves = diagram.moves || [];
+  let svgLines = '';
+  let labelHTML = '';
 
-  if (moveArrows.length || passRoutes.length) {
-    const moveId = 'mv' + idx;
-    const passId = 'ps' + idx;
-
-    const moveLines = moveArrows.map(a => {
-      const from = players.find(p => p.name === a.player);
-      if (!from) return '';
-      const x1 = clamp(from.x, 5, 95) * 0.75;
-      const y1 = clamp(from.y, 4, 96);
-      const x2 = clamp(a.ex, 5, 95) * 0.75;
-      const y2 = clamp(a.ey, 4, 96);
+  if (moves.length) {
+    const markerId = 'mv' + idx;
+    svgLines = moves.map(m => {
+      const p = posMap[m.player];
+      if (!p) return '';
+      const x1 = p.x, y1 = p.y;
+      let x2, y2;
+      if (m.direction === 'flank_left')  { x2 = Math.max(6, x1 - 18); y2 = Math.max(12, y1 - 22); }
+      else if (m.direction === 'flank_right') { x2 = Math.min(94, x1 + 18); y2 = Math.max(12, y1 - 22); }
+      else                               { x2 = x1; y2 = Math.max(10, y1 - 24); } // forward
+      if (m.label) {
+        labelHTML += `<div class="pitch-arrow-label" style="left:${x2}%;top:${y2}%">${escHtml(m.label)}</div>`;
+      }
       return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
-        stroke="#ffe066" stroke-width="1.2" stroke-dasharray="3,2"
-        marker-end="url(#${moveId})" />`;
+        stroke="#ffe066" stroke-width="1.4" stroke-dasharray="4,2.5"
+        marker-end="url(#${markerId})" />`;
     }).join('');
 
-    const passLines = passRoutes.map(r => {
-      const from = players.find(p => p.name === r.from);
-      const to = players.find(p => p.name === r.to);
-      if (!from || !to) return '';
-      const x1 = clamp(from.x, 5, 95) * 0.75;
-      const y1 = clamp(from.y, 4, 96);
-      const x2 = clamp(to.x, 5, 95) * 0.75;
-      const y2 = clamp(to.y, 4, 96);
-      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
-        stroke="rgba(96,205,255,0.7)" stroke-width="0.9"
-        marker-end="url(#${passId})" />`;
-    }).join('');
-
-    svgContent = `<svg class="pitch-arrows" viewBox="0 0 75 100">
-      <defs>
-        <marker id="${moveId}" markerWidth="5" markerHeight="4" refX="4.5" refY="2" orient="auto">
-          <polygon points="0 0.3, 5 2, 0 3.7" fill="#ffe066"/>
-        </marker>
-        <marker id="${passId}" markerWidth="5" markerHeight="4" refX="4.5" refY="2" orient="auto">
-          <polygon points="0 0.3, 5 2, 0 3.7" fill="rgba(96,205,255,0.9)"/>
-        </marker>
-      </defs>
-      ${passLines}${moveLines}
-    </svg>`;
-
-    arrowLabelsHTML = moveArrows.map(a => {
-      if (!a.label) return '';
-      const ex = clamp(a.ex, 5, 95);
-      const ey = clamp(a.ey, 4, 96);
-      return `<div class="pitch-arrow-label" style="left:${ex}%;top:${ey}%">${escHtml(a.label)}</div>`;
-    }).join('');
+    if (svgLines.trim()) {
+      svgLines = `<svg class="pitch-arrows" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <defs>
+          <marker id="${markerId}" markerWidth="5" markerHeight="4" refX="4.5" refY="2" orient="auto">
+            <polygon points="0 0.3, 5 2, 0 3.7" fill="#ffe066"/>
+          </marker>
+        </defs>
+        ${svgLines}
+      </svg>`;
+    }
   }
 
   return `
@@ -637,9 +640,9 @@ function renderPitch(diagram, idx) {
         <div class="pitch-pa pitch-pa-b"></div>
         <div class="pitch-goal-label pitch-gl-t">상대 골대</div>
         <div class="pitch-goal-label pitch-gl-b">우리 골대</div>
-        ${svgContent}
+        ${svgLines}
         ${playersHTML}
-        ${arrowLabelsHTML}
+        ${labelHTML}
       </div>
     </div>`;
 }
