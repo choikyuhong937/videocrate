@@ -409,13 +409,7 @@ ${lines}
         {
           "name": "선수이름",
           "assigned_position": "배정 포지션 (예: 오른쪽 윙백)",
-          "pass_first": "1순위 패스 대상 선수 이름",
-          "pass_second": "2순위 패스 대상 선수 이름",
-          "instructions": [
-            "이 선수의 특성에 맞는 구체적 움직임 지침 1",
-            "이 선수의 특성에 맞는 구체적 움직임 지침 2",
-            "이 선수의 특성에 맞는 구체적 움직임 지침 3"
-          ]
+          "tactic": "이 경기 포메이션과 팀 전술 안에서 이 선수가 해야 할 핵심 역할 (1~2문장, 다른 선수 이름과 구체적 상황 명시)"
         }
       ],
       "subs": ["교체선수1", "교체선수2"]
@@ -436,12 +430,14 @@ ${lines}
 - subs는 나머지 ${subCount}명 (이름만)
 - 모든 선수 이름은 위 명단 그대로 사용
 - 선수의 가능한 포지션 내에서 배정
-- 각 선수의 pass_first, pass_second 반드시 포함
-- 각 선수의 instructions는 반드시 그 선수의 실력·체력·스피드·성향·특기를 반영하여 차별화
-  예) 스피드 빠른 선수 → "공간이 보이면 전속력으로 전방 침투"
-  예) 체력 약한 선수 → "전반에 집중하고 불필요한 달리기 줄이기"
-  예) 패스 특기 → "중앙에서 볼 받으면 공격수에게 스루패스 노리기"
-- instructions에 패스 대상 선수 이름을 직접 언급 (예: "공 잡으면 먼저 홍길동 찾기")
+- 각 선수의 tactic은 반드시 아래 기준을 모두 충족:
+  1) 이 경기의 포메이션/팀 전술과 직접 연결 (단순 개인 특성 나열 금지)
+  2) 다른 선수 이름을 1명 이상 직접 언급 (패스 연결·공간 커버 등)
+  3) 선수의 스피드·체력·성향·특기가 전술적 이유가 되어야 함
+  4) 구체적 상황 묘사: "언제" "어디서" "어떻게" 포함
+  좋은 예) "김철수가 오른쪽 오버래핑 나가면 그 빈 공간 즉시 메워서 역습 차단, 볼 따내면 박민준에게 짧게 패스"
+  좋은 예) "스피드가 느리므로 박민준·이상훈과 삼각패스로 좁은 공간 뚫기, 단독 돌파보다 원터치 연계 우선"
+  나쁜 예) "스피드가 빠르므로 전방 침투를 노린다" (너무 당연하고 팀 전술 연결 없음)
 - 아마추어 수준에 맞는 현실적 지침
 - 전문 용어 사용 금지, 쉬운 한국어로`;
 }
@@ -513,24 +509,15 @@ function renderResult(d) {
         <span class="legend-item"><span class="legend-line pass"></span> 패스</span>
       </div>` : '';
 
-    // 선수별 지침 (패스 대상 포함)
+    // 선수별 세부전술
     const startersHTML = (g.starters || []).map(pi => {
-      const passInfo = [];
-      if (pi.pass_first) passInfo.push(`1순위: ${escHtml(pi.pass_first)}`);
-      if (pi.pass_second) passInfo.push(`2순위: ${escHtml(pi.pass_second)}`);
-      const passBadge = passInfo.length
-        ? `<div class="pi-pass"><span class="pi-pass-label">패스 대상</span> ${passInfo.join(' / ')}</div>` : '';
-
       return `
       <div class="pi-card">
         <div class="pi-head">
           <span class="pi-name">${escHtml(pi.name)}</span>
           <span class="pi-pos">${escHtml(pi.assigned_position || '')}</span>
         </div>
-        ${passBadge}
-        <ul class="pi-list">
-          ${(pi.instructions || []).map(t => `<li>${escHtml(t)}</li>`).join('')}
-        </ul>
+        <div class="pi-tactic">${escHtml(pi.tactic || '')}</div>
       </div>`;
     }).join('');
 
@@ -554,7 +541,7 @@ function renderResult(d) {
         </div>
         ${subsHTML}
         <div class="players-section">
-          <h4>👤 선발 11명 개인 지침</h4>
+          <h4>🎯 선발 11명 세부전술</h4>
           ${startersHTML}
         </div>
       </div>`;
