@@ -2,66 +2,87 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>조기축구 감독실 ⚽</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#16a34a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="감독실" />
+
+  <!-- 카카오톡 공유 미리보기 (Open Graph) -->
+  <meta property="og:type"        content="website" />
+  <meta property="og:title"       content="⚽ 조기축구 감독실" />
+  <meta property="og:description" content="우리 팀 선수 정보 입력하고 AI 전술·포메이션 추천받기" />
+  <meta property="og:image"       content="https://choikyuhong937.github.io/videocrate/icon-512.png" />
+  <meta property="og:url"         content="https://choikyuhong937.github.io/videocrate/" />
+
+  <title>⚽ 조기축구 감독실</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <!-- 헤더 -->
+  <!-- 상단 헤더 -->
   <header>
     <div class="header-inner">
-      <div class="logo">⚽ 조기축구 감독실</div>
-      <nav>
-        <button class="nav-btn active" onclick="showPage('roster')">선수 명단</button>
-        <button class="nav-btn" onclick="showPage('match')">오늘 경기</button>
-        <button class="nav-btn" onclick="showPage('settings')">설정</button>
-      </nav>
+      <span class="logo">⚽ 조기축구 감독실</span>
+      <button class="share-btn" onclick="shareApp()" title="공유하기">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+        </svg>
+      </button>
     </div>
   </header>
 
+  <!-- 콘텐츠 영역 -->
   <main>
 
-    <!-- ============ 페이지: 선수 명단 ============ -->
+    <!-- ========== 선수 명단 ========== -->
     <section id="page-roster" class="page active">
       <div class="section-header">
-        <h2>선수 명단 관리</h2>
-        <button class="btn-primary" onclick="openAddPlayerModal()">+ 선수 추가</button>
+        <h2>선수 명단</h2>
+        <button class="btn-primary btn-sm" onclick="openAddPlayerModal()">+ 추가</button>
       </div>
       <div id="player-list" class="player-grid">
-        <div class="empty-state">선수를 추가해주세요.</div>
+        <div class="empty-state">
+          <div class="empty-icon">👥</div>
+          <p>선수가 없습니다</p>
+          <button class="btn-primary" onclick="openAddPlayerModal()">첫 선수 추가하기</button>
+        </div>
       </div>
     </section>
 
-    <!-- ============ 페이지: 오늘 경기 ============ -->
+    <!-- ========== 오늘 경기 ========== -->
     <section id="page-match" class="page">
       <div class="section-header">
-        <h2>오늘 경기 선수 선택</h2>
-        <span class="selected-count" id="selected-count">0명 선택됨</span>
+        <h2>오늘 경기</h2>
+        <span class="badge-count" id="selected-count">0명</span>
       </div>
-      <p class="hint">오늘 출전 가능한 선수들을 선택해주세요. (최소 7명 ~ 최대 11명 권장)</p>
+      <p class="hint">출전 선수를 탭해서 선택하세요 (최소 5명)</p>
       <div id="match-player-list" class="player-grid selectable"></div>
 
       <div class="tactics-controls">
-        <div class="form-group">
-          <label>경기 스타일 희망</label>
-          <select id="preferred-style">
-            <option value="균형">균형잡힌 플레이</option>
-            <option value="공격">공격적 플레이</option>
-            <option value="수비">수비적 플레이</option>
-            <option value="점유">점유율 중심</option>
-            <option value="역습">빠른 역습</option>
-          </select>
+        <div class="ctrl-row">
+          <div class="form-group">
+            <label>희망 스타일</label>
+            <select id="preferred-style">
+              <option value="균형">⚖️ 균형 플레이</option>
+              <option value="공격">⚡ 공격 위주</option>
+              <option value="수비">🛡️ 수비 위주</option>
+              <option value="점유">🎯 점유율 중심</option>
+              <option value="역습">🚀 빠른 역습</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>상대 수준</label>
+            <select id="opponent-level">
+              <option value="비슷">😤 비슷</option>
+              <option value="강함">💪 우리보다 강함</option>
+              <option value="약함">😊 우리보다 약함</option>
+            </select>
+          </div>
         </div>
-        <div class="form-group">
-          <label>상대팀 수준</label>
-          <select id="opponent-level">
-            <option value="비슷">비슷한 수준</option>
-            <option value="강함">우리보다 강함</option>
-            <option value="약함">우리보다 약함</option>
-          </select>
-        </div>
-        <button class="btn-primary btn-large" onclick="getTacticsFromAI()">
+        <button class="btn-ai" onclick="getTacticsFromAI()">
           🤖 AI 전술 추천 받기
         </button>
       </div>
@@ -69,49 +90,89 @@
       <!-- AI 결과 -->
       <div id="ai-result" class="ai-result hidden">
         <div class="ai-result-header">
-          <h3>🎯 AI 전술 분석 결과</h3>
+          <span>🎯 AI 전술 분석 결과</span>
+          <button class="share-result-btn" onclick="shareResult()" title="결과 공유">공유</button>
         </div>
         <div id="ai-result-content"></div>
       </div>
     </section>
 
-    <!-- ============ 페이지: 설정 ============ -->
+    <!-- ========== 설정 ========== -->
     <section id="page-settings" class="page">
-      <h2>설정</h2>
+      <h2 style="margin-bottom:20px">설정</h2>
+
       <div class="settings-card">
-        <h3>🔑 Gemini API 키</h3>
-        <p class="hint">Google AI Studio에서 발급받은 API 키를 입력하세요.</p>
-        <div class="input-row">
-          <input type="password" id="api-key-input" placeholder="AIza..." />
-          <button class="btn-primary" onclick="saveApiKey()">저장</button>
+        <div class="settings-card-icon">🔑</div>
+        <div class="settings-card-body">
+          <h3>Gemini API 키</h3>
+          <p class="hint">Google AI Studio에서 무료로 발급받으세요.</p>
+          <a class="link-btn" href="https://aistudio.google.com/app/apikey" target="_blank">API 키 발급하러 가기 →</a>
+          <div class="input-row">
+            <input type="password" id="api-key-input" placeholder="AIza..." autocomplete="off" />
+            <button class="btn-primary btn-sm" onclick="saveApiKey()">저장</button>
+          </div>
+          <p id="api-key-status" class="status-text"></p>
         </div>
-        <p id="api-key-status" class="status-text"></p>
       </div>
+
       <div class="settings-card">
-        <h3>⚠️ 데이터 초기화</h3>
-        <p class="hint">저장된 선수 명단을 모두 삭제합니다.</p>
-        <button class="btn-danger" onclick="clearAllData()">전체 초기화</button>
+        <div class="settings-card-icon">📤</div>
+        <div class="settings-card-body">
+          <h3>카카오톡으로 공유</h3>
+          <p class="hint">링크를 복사해서 카톡으로 공유하세요.</p>
+          <button class="btn-share-kakao" onclick="shareApp()">
+            🔗 링크 복사 / 공유하기
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-card danger-card">
+        <div class="settings-card-icon">⚠️</div>
+        <div class="settings-card-body">
+          <h3>데이터 초기화</h3>
+          <p class="hint">저장된 선수 명단을 모두 삭제합니다.</p>
+          <button class="btn-danger" onclick="clearAllData()">전체 초기화</button>
+        </div>
       </div>
     </section>
 
   </main>
 
-  <!-- ============ 선수 추가/수정 모달 ============ -->
-  <div id="player-modal" class="modal-overlay hidden" onclick="closeModalOnOverlay(event)">
+  <!-- 하단 탭 네비게이션 (모바일) -->
+  <nav class="bottom-nav">
+    <button class="tab-btn active" onclick="showPage('roster')" id="tab-roster">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>선수 명단</span>
+    </button>
+    <button class="tab-btn" onclick="showPage('match')" id="tab-match">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+      <span>오늘 경기</span>
+    </button>
+    <button class="tab-btn" onclick="showPage('settings')" id="tab-settings">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M19.07 4.93l-1.41 1.41M6.34 17.66l-1.41 1.41M19.07 19.07l-1.41-1.41M6.34 6.34L4.93 4.93"/></svg>
+      <span>설정</span>
+    </button>
+  </nav>
+
+  <!-- ========== 선수 추가/수정 모달 (풀스크린) ========== -->
+  <div id="player-modal" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-header">
+        <button class="modal-back" onclick="closePlayerModal()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15,18 9,12 15,6"/></svg>
+        </button>
         <h3 id="modal-title">선수 추가</h3>
-        <button class="modal-close" onclick="closePlayerModal()">✕</button>
+        <button class="modal-save-btn" onclick="savePlayer()">저장</button>
       </div>
       <div class="modal-body">
         <input type="hidden" id="modal-player-id" />
 
-        <div class="form-row">
+        <div class="form-row-2">
           <div class="form-group">
             <label>이름 *</label>
             <input type="text" id="modal-name" placeholder="홍길동" />
           </div>
-          <div class="form-group">
+          <div class="form-group form-group-sm">
             <label>등번호</label>
             <input type="number" id="modal-number" placeholder="10" min="1" max="99" />
           </div>
@@ -119,68 +180,68 @@
 
         <div class="form-group">
           <label>포지션 선호도 *</label>
-          <div class="position-picker" id="position-picker">
-            <button type="button" class="pos-btn" data-pos="GK">GK</button>
-            <button type="button" class="pos-btn" data-pos="CB">CB</button>
-            <button type="button" class="pos-btn" data-pos="SB">SB</button>
-            <button type="button" class="pos-btn" data-pos="CM">CM</button>
-            <button type="button" class="pos-btn" data-pos="WM">LM/RM</button>
-            <button type="button" class="pos-btn" data-pos="FW">FW</button>
+          <div class="chip-group" id="position-picker">
+            <button type="button" class="chip pos-chip" data-pos="GK">GK</button>
+            <button type="button" class="chip pos-chip" data-pos="CB">CB</button>
+            <button type="button" class="chip pos-chip" data-pos="SB">SB</button>
+            <button type="button" class="chip pos-chip" data-pos="CM">CM</button>
+            <button type="button" class="chip pos-chip" data-pos="WM">LM/RM</button>
+            <button type="button" class="chip pos-chip" data-pos="FW">FW</button>
           </div>
         </div>
 
         <div class="form-group">
           <label>실력 수준</label>
-          <div class="level-picker" id="level-picker">
-            <button type="button" class="level-btn" data-level="초급">초급 🌱</button>
-            <button type="button" class="level-btn active" data-level="중급">중급 ⚽</button>
-            <button type="button" class="level-btn" data-level="고급">고급 🌟</button>
+          <div class="chip-group" id="level-picker">
+            <button type="button" class="chip level-chip" data-level="초급">🌱 초급</button>
+            <button type="button" class="chip level-chip active" data-level="중급">⚽ 중급</button>
+            <button type="button" class="chip level-chip" data-level="고급">🌟 고급</button>
           </div>
         </div>
 
-        <div class="form-row">
+        <div class="form-row-2">
           <div class="form-group">
             <label>스피드</label>
             <select id="modal-speed">
-              <option value="빠름">빠름</option>
-              <option value="보통" selected>보통</option>
-              <option value="느림">느림</option>
+              <option value="빠름">🐇 빠름</option>
+              <option value="보통" selected>➡️ 보통</option>
+              <option value="느림">🐢 느림</option>
             </select>
           </div>
           <div class="form-group">
             <label>체력</label>
             <select id="modal-stamina">
-              <option value="좋음">좋음</option>
-              <option value="보통" selected>보통</option>
-              <option value="약함">약함</option>
+              <option value="좋음">💪 좋음</option>
+              <option value="보통" selected>➡️ 보통</option>
+              <option value="약함">😮‍💨 약함</option>
             </select>
           </div>
         </div>
 
         <div class="form-group">
           <label>플레이 성향</label>
-          <div class="tag-picker" id="style-picker">
-            <button type="button" class="tag-btn" data-val="공격적">공격적</button>
-            <button type="button" class="tag-btn" data-val="수비적">수비적</button>
-            <button type="button" class="tag-btn" data-val="균형형">균형형</button>
-            <button type="button" class="tag-btn" data-val="기술파">기술파</button>
-            <button type="button" class="tag-btn" data-val="피지컬파">피지컬파</button>
-            <button type="button" class="tag-btn" data-val="적극적">적극적</button>
-            <button type="button" class="tag-btn" data-val="소극적">소극적</button>
+          <div class="chip-group" id="style-picker">
+            <button type="button" class="chip tag-chip" data-val="공격적">공격적</button>
+            <button type="button" class="chip tag-chip" data-val="수비적">수비적</button>
+            <button type="button" class="chip tag-chip" data-val="균형형">균형형</button>
+            <button type="button" class="chip tag-chip" data-val="기술파">기술파</button>
+            <button type="button" class="chip tag-chip" data-val="피지컬파">피지컬파</button>
+            <button type="button" class="chip tag-chip" data-val="적극적">적극적</button>
+            <button type="button" class="chip tag-chip" data-val="소극적">소극적</button>
           </div>
         </div>
 
         <div class="form-group">
           <label>특기 (복수 선택 가능)</label>
-          <div class="tag-picker" id="skill-picker">
-            <button type="button" class="tag-btn" data-val="슛">슛</button>
-            <button type="button" class="tag-btn" data-val="패스">패스</button>
-            <button type="button" class="tag-btn" data-val="드리블">드리블</button>
-            <button type="button" class="tag-btn" data-val="헤딩">헤딩</button>
-            <button type="button" class="tag-btn" data-val="수비">수비</button>
-            <button type="button" class="tag-btn" data-val="스피드">스피드</button>
-            <button type="button" class="tag-btn" data-val="체력">체력</button>
-            <button type="button" class="tag-btn" data-val="위치선정">위치선정</button>
+          <div class="chip-group" id="skill-picker">
+            <button type="button" class="chip tag-chip" data-val="슛">⚽ 슛</button>
+            <button type="button" class="chip tag-chip" data-val="패스">🎯 패스</button>
+            <button type="button" class="chip tag-chip" data-val="드리블">🌀 드리블</button>
+            <button type="button" class="chip tag-chip" data-val="헤딩">💪 헤딩</button>
+            <button type="button" class="chip tag-chip" data-val="수비">🛡️ 수비</button>
+            <button type="button" class="chip tag-chip" data-val="스피드">🚀 스피드</button>
+            <button type="button" class="chip tag-chip" data-val="체력">🏃 체력</button>
+            <button type="button" class="chip tag-chip" data-val="위치선정">🗺️ 위치선정</button>
           </div>
         </div>
 
@@ -188,21 +249,23 @@
           <label>메모</label>
           <textarea id="modal-note" placeholder="부상 이력, 특이사항 등..." rows="2"></textarea>
         </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" onclick="closePlayerModal()">취소</button>
-        <button class="btn-primary" onclick="savePlayer()">저장</button>
+
+        <div style="height:20px"></div>
       </div>
     </div>
   </div>
 
-  <!-- 로딩 오버레이 -->
+  <!-- 로딩 -->
   <div id="loading-overlay" class="modal-overlay hidden">
     <div class="loading-box">
-      <div class="spinner"></div>
-      <p>AI가 전술을 분석 중입니다...</p>
+      <div class="ball-spinner">⚽</div>
+      <p>AI가 전술 분석 중...</p>
+      <small>잠시만 기다려주세요</small>
     </div>
   </div>
+
+  <!-- 공유 완료 토스트 -->
+  <div id="toast" class="toast hidden"></div>
 
   <script src="app.js"></script>
 </body>
