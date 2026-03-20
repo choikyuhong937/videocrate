@@ -157,7 +157,7 @@ function cardHTML(p, selectable) {
       ${check}
       ${numBadge}
       <div class="player-name-text">${escHtml(p.name)}</div>
-      <span class="pos-badge">${p.position}</span>
+      <span class="pos-badge">${Array.isArray(p.position) ? p.position.join('/') : p.position}</span>
       <div class="card-tags">
         <span class="tag">${lvEmoji} ${p.level}</span>
         ${p.speed !== '보통' ? `<span class="tag">${p.speed}</span>` : ''}
@@ -214,7 +214,8 @@ function openEditModal(id) {
 
   // 포지션
   document.querySelectorAll('#position-picker .pos-chip').forEach(b => {
-    if (b.dataset.pos === p.position) b.classList.add('active');
+    const pos = Array.isArray(p.position) ? p.position : [p.position];
+    if (pos.includes(b.dataset.pos)) b.classList.add('active');
   });
   // 레벨
   document.querySelectorAll('#level-picker .level-chip').forEach(b => {
@@ -246,8 +247,8 @@ function savePlayer() {
   const name = document.getElementById('modal-name').value.trim();
   if (!name) { alert('이름을 입력해주세요.'); return; }
 
-  const posEl = document.querySelector('#position-picker .pos-chip.active');
-  if (!posEl) { alert('포지션을 선택해주세요.'); return; }
+  const posEls = [...document.querySelectorAll('#position-picker .pos-chip.active')];
+  if (!posEls.length) { alert('포지션을 선택해주세요.'); return; }
 
   const lvEl = document.querySelector('#level-picker .level-chip.active');
   const styles = [...document.querySelectorAll('#style-picker .tag-chip.active')].map(b => b.dataset.val);
@@ -256,7 +257,7 @@ function savePlayer() {
   const data = {
     name,
     number: document.getElementById('modal-number').value || '',
-    position: posEl.dataset.pos,
+    position: posEls.map(b => b.dataset.pos),
     level: lvEl ? lvEl.dataset.level : '중급',
     speed: document.getElementById('modal-speed').value,
     stamina: document.getElementById('modal-stamina').value,
@@ -291,12 +292,9 @@ function deletePlayer(id) {
 
 // ── 칩 피커 초기화 ────────────────────────────
 function initChipPickers() {
-  // 포지션, 레벨: 단일 선택
+  // 포지션: 복수 선택
   document.querySelectorAll('#position-picker .pos-chip').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('#position-picker .pos-chip').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-    });
+    btn.addEventListener('click', () => btn.classList.toggle('active'));
   });
   document.querySelectorAll('#level-picker .level-chip').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -354,7 +352,7 @@ async function getTacticsFromAI() {
 
 function buildPrompt(sel, style, opponent) {
   const lines = sel.map((p, i) =>
-    `${i+1}. ${p.name} | 포지션: ${p.position} | 실력: ${p.level} | 스피드: ${p.speed} | 체력: ${p.stamina} | 성향: ${(p.styles||[]).join(',') || '없음'} | 특기: ${(p.skills||[]).join(',') || '없음'}`
+    `${i+1}. ${p.name} | 포지션: ${Array.isArray(p.position) ? p.position.join('/') : p.position} | 실력: ${p.level} | 스피드: ${p.speed} | 체력: ${p.stamina} | 성향: ${(p.styles||[]).join(',') || '없음'} | 특기: ${(p.skills||[]).join(',') || '없음'}`
   ).join('\n');
 
   return `당신은 아마추어 조기축구팀 전술 코치입니다.
