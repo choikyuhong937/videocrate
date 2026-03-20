@@ -298,6 +298,13 @@ function initChipPickers() {
   document.querySelectorAll('#position-picker .pos-chip').forEach(btn => {
     btn.addEventListener('click', () => btn.classList.toggle('active'));
   });
+  // 포메이션: 단일 선택
+  document.querySelectorAll('#formation-picker .fm-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#formation-picker .fm-chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
   // 레벨: 단일 선택
   document.querySelectorAll('#level-picker .level-chip').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -334,12 +341,14 @@ async function getTacticsFromAI() {
 
   const style    = document.getElementById('preferred-style').value;
   const opponent = document.getElementById('opponent-level').value;
+  const fmEl = document.querySelector('#formation-picker .fm-chip.active');
+  const formation = fmEl ? fmEl.dataset.fm : 'AI추천';
 
   showLoading(true);
   document.getElementById('ai-result').classList.add('hidden');
 
   try {
-    const prompt   = buildPrompt(sel, style, opponent);
+    const prompt   = buildPrompt(sel, style, opponent, formation);
     const response = await callGemini(getApiKey(), prompt);
     const text     = response?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) throw new Error('AI 응답이 비어있습니다.');
@@ -353,7 +362,7 @@ async function getTacticsFromAI() {
   }
 }
 
-function buildPrompt(sel, style, opponent) {
+function buildPrompt(sel, style, opponent, formation) {
   const total = sel.length;
   const subCount = total - 11;
   const lines = sel.map((p, i) => {
@@ -369,6 +378,7 @@ function buildPrompt(sel, style, opponent) {
 [전체 선수 ${total}명]
 ${lines}
 
+[선호 포메이션]: ${formation === 'AI추천' ? 'AI가 최적의 포메이션 자유롭게 추천' : formation + ' (4경기 모두 이 포메이션 사용)'}
 [감독 희망 스타일]: ${style}
 [상대팀 수준]: ${opponent}
 

@@ -539,6 +539,7 @@ textarea { resize: vertical; min-height: 64px; }
 .pos-chip.active  { background: var(--blue);  color: white; border-color: var(--blue); }
 .level-chip.active{ background: var(--green); color: white; border-color: var(--green); }
 .tag-chip.active  { background: var(--green-l); color: var(--green-d); border-color: #86efac; font-weight: 700; }
+.fm-chip.active   { background: var(--gray-900); color: white; border-color: var(--gray-900); }
 
 /* ===== 모달 (풀스크린 슬라이드업) ===== */
 .modal-overlay {
