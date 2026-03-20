@@ -539,6 +539,7 @@ textarea { resize: vertical; min-height: 64px; }
 .pos-chip.active  { background: var(--blue);  color: white; border-color: var(--blue); }
 .level-chip.active{ background: var(--green); color: white; border-color: var(--green); }
 .tag-chip.active  { background: var(--green-l); color: var(--green-d); border-color: #86efac; font-weight: 700; }
+.fm-chip.active   { background: var(--gray-900); color: white; border-color: var(--gray-900); }
 
 /* ===== 모달 (풀스크린 슬라이드업) ===== */
 .modal-overlay {
@@ -735,6 +736,213 @@ textarea { resize: vertical; min-height: 64px; }
   font-size: .78rem;
   font-weight: 600;
   color: #78350f;
+}
+
+/* ===== 공격 방향 뱃지 ===== */
+.attack-dir-badge {
+  display: inline-block;
+  background: #1e40af;
+  color: white;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: .78rem;
+  font-weight: 700;
+  margin-top: 8px;
+}
+
+/* ===== 피치 다이어그램 ===== */
+.pitch-card {
+  background: white;
+  border: 1.5px solid var(--gray-200);
+  border-radius: var(--r);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.pitch-card-head {
+  background: var(--gray-900);
+  color: white;
+  padding: 10px 14px;
+  font-weight: 800;
+  font-size: .85rem;
+}
+
+.pitch {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3/4;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      #2d8a4e 0, #2d8a4e 12.5%,
+      #339850 12.5%, #339850 25%
+    );
+  overflow: hidden;
+}
+/* 센터라인 */
+.pitch::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  border-top: 1.5px solid rgba(255,255,255,0.3);
+  z-index: 0;
+}
+/* 센터서클 */
+.pitch::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20%;
+  aspect-ratio: 1;
+  border: 1.5px solid rgba(255,255,255,0.3);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 0;
+}
+/* 페널티 박스 */
+.pitch-pa {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 52%;
+  height: 14%;
+  border: 1.5px solid rgba(255,255,255,0.3);
+  z-index: 0;
+  pointer-events: none;
+}
+.pitch-pa-t { top: 0; border-top: none; }
+.pitch-pa-b { bottom: 0; border-bottom: none; }
+
+/* 골대 표시 */
+.pitch-goal-label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: .55rem;
+  color: rgba(255,255,255,0.45);
+  font-weight: 700;
+  z-index: 0;
+  pointer-events: none;
+  letter-spacing: 1px;
+}
+.pitch-gl-t { top: 4px; }
+.pitch-gl-b { bottom: 4px; }
+
+/* 선수 마커 */
+.pp {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  z-index: 3;
+  pointer-events: none;
+}
+.pp-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: white;
+  color: var(--gray-900);
+  font-size: .65rem;
+  font-weight: 800;
+  margin: 0 auto 1px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  border: 2px solid rgba(255,255,255,0.9);
+}
+.pp-dot.gk {
+  background: #fbbf24;
+  color: #78350f;
+  border-color: #fde68a;
+}
+.pp-label {
+  font-size: .55rem;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.5);
+  white-space: nowrap;
+  line-height: 1.1;
+}
+
+/* SVG 화살표 오버레이 */
+.pitch-arrows {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* 이동 라벨 */
+.pitch-arrow-label {
+  position: absolute;
+  transform: translate(-50%, -140%);
+  font-size: .5rem;
+  color: #fde68a;
+  font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 4;
+  background: rgba(0,0,0,0.35);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* 범례 */
+.diagram-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 4px;
+  justify-content: center;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: .68rem;
+  color: var(--gray-500);
+  font-weight: 600;
+}
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  border: 1.5px solid var(--gray-300);
+}
+.legend-dot.gk { background: #fbbf24; border-color: #fde68a; }
+.legend-line {
+  width: 20px;
+  height: 0;
+}
+.legend-line.move { border-top: 2px dashed #ffe066; }
+.legend-line.pass { border-top: 2px solid #60cdff; }
+
+/* 패스 대상 뱃지 */
+.pi-pass {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  font-size: .78rem;
+  color: #1e40af;
+  font-weight: 600;
+}
+.pi-pass-label {
+  background: #2563eb;
+  color: white;
+  font-size: .65rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-right: 6px;
 }
 
 /* ===== 데스크탑 보정 (태블릿/PC에서도 보기 좋게) ===== */

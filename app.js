@@ -298,6 +298,13 @@ function initChipPickers() {
   document.querySelectorAll('#position-picker .pos-chip').forEach(btn => {
     btn.addEventListener('click', () => btn.classList.toggle('active'));
   });
+  // 포메이션: 단일 선택
+  document.querySelectorAll('#formation-picker .fm-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#formation-picker .fm-chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
   // 레벨: 단일 선택
   document.querySelectorAll('#level-picker .level-chip').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -334,12 +341,14 @@ async function getTacticsFromAI() {
 
   const style    = document.getElementById('preferred-style').value;
   const opponent = document.getElementById('opponent-level').value;
+  const fmEl = document.querySelector('#formation-picker .fm-chip.active');
+  const formation = fmEl ? fmEl.dataset.fm : 'AI추천';
 
   showLoading(true);
   document.getElementById('ai-result').classList.add('hidden');
 
   try {
-    const prompt   = buildPrompt(sel, style, opponent);
+    const prompt   = buildPrompt(sel, style, opponent, formation);
     const response = await callGemini(getApiKey(), prompt);
     const text     = response?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) throw new Error('AI 응답이 비어있습니다.');
@@ -353,7 +362,7 @@ async function getTacticsFromAI() {
   }
 }
 
-function buildPrompt(sel, style, opponent) {
+function buildPrompt(sel, style, opponent, formation) {
   const total = sel.length;
   const subCount = total - 11;
   const lines = sel.map((p, i) => {
@@ -369,6 +378,7 @@ function buildPrompt(sel, style, opponent) {
 [전체 선수 ${total}명]
 ${lines}
 
+[선호 포메이션]: ${formation === 'AI추천' ? 'AI가 최적의 포메이션 자유롭게 추천' : formation + ' (4경기 모두 이 포메이션 사용)'}
 [감독 희망 스타일]: ${style}
 [상대팀 수준]: ${opponent}
 
@@ -381,15 +391,30 @@ ${lines}
       "game": 1,
       "formation": "4-3-3",
       "formation_reason": "포메이션 선택 이유 (1~2문장, 쉬운 표현)",
+      "attack_direction": "주 공격 방향 (예: 오른쪽 측면 집중, 중앙 돌파 등)",
       "team_tactics": "팀 전체 전술 요약 (2~3문장, 아마추어가 이해하기 쉽게)",
       "key_points": ["핵심 포인트 1", "핵심 포인트 2", "핵심 포인트 3"],
+      "diagram": {
+        "players": [
+          {"name":"선수이름","role":"GK","x":50,"y":92}
+        ],
+        "arrows": [
+          {"player":"선수이름","ex":85,"ey":25,"label":"오버래핑"}
+        ],
+        "pass_routes": [
+          {"from":"선수A","to":"선수B"}
+        ]
+      },
       "starters": [
         {
           "name": "선수이름",
-          "assigned_position": "배정 포지션 (예: 오른쪽 수비수)",
+          "assigned_position": "배정 포지션 (예: 오른쪽 윙백)",
+          "pass_first": "1순위 패스 대상 선수 이름",
+          "pass_second": "2순위 패스 대상 선수 이름",
           "instructions": [
-            "아마추어가 실제 경기에서 할 수 있는 구체적 움직임 지침 1",
-            "구체적 움직임 지침 2"
+            "이 선수의 특성에 맞는 구체적 움직임 지침 1",
+            "이 선수의 특성에 맞는 구체적 움직임 지침 2",
+            "이 선수의 특성에 맞는 구체적 움직임 지침 3"
           ]
         }
       ],
@@ -398,12 +423,25 @@ ${lines}
   ]
 }
 
+좌표 규칙 (diagram.players):
+- x: 0=왼쪽 터치라인, 50=중앙, 100=오른쪽 터치라인
+- y: 0=상대 골대, 50=하프라인, 100=우리 골대
+- GK: y=90~95, 수비수: y=72~82, 미드필더: y=45~60, 공격수: y=15~35
+- arrows: 공격 시 핵심 이동 2~4개 (윙백 오버래핑, 전방 침투 등)
+- pass_routes: 주요 패스 연결 3~5개 (from/to는 diagram.players의 name과 동일)
+
 주의:
 - 4경기 모두 포함 (game: 1, 2, 3, 4)
-- 각 경기 starters 정확히 11명
+- 각 경기 starters 정확히 11명, diagram.players도 정확히 11명
 - subs는 나머지 ${subCount}명 (이름만)
 - 모든 선수 이름은 위 명단 그대로 사용
 - 선수의 가능한 포지션 내에서 배정
+- 각 선수의 pass_first, pass_second 반드시 포함
+- 각 선수의 instructions는 반드시 그 선수의 실력·체력·스피드·성향·특기를 반영하여 차별화
+  예) 스피드 빠른 선수 → "공간이 보이면 전속력으로 전방 침투"
+  예) 체력 약한 선수 → "전반에 집중하고 불필요한 달리기 줄이기"
+  예) 패스 특기 → "중앙에서 볼 받으면 공격수에게 스루패스 노리기"
+- instructions에 패스 대상 선수 이름을 직접 언급 (예: "공 잡으면 먼저 홍길동 찾기")
 - 아마추어 수준에 맞는 현실적 지침
 - 전문 용어 사용 금지, 쉬운 한국어로`;
 }
@@ -458,16 +496,43 @@ function renderResult(d) {
 
   const panels = games.map((g, i) => {
     const kpHTML = (g.key_points || []).map(kp => `<li>${escHtml(kp)}</li>`).join('');
-    const startersHTML = (g.starters || []).map(pi => `
+
+    // 공격 방향 뱃지
+    const attackDir = g.attack_direction
+      ? `<div class="attack-dir-badge">${escHtml(g.attack_direction)}</div>` : '';
+
+    // 피치 다이어그램
+    const diagramHTML = g.diagram ? renderPitch(g.diagram, i) : '';
+
+    // 범례
+    const legendHTML = g.diagram ? `
+      <div class="diagram-legend">
+        <span class="legend-item"><span class="legend-dot"></span> 선수</span>
+        <span class="legend-item"><span class="legend-dot gk"></span> GK</span>
+        <span class="legend-item"><span class="legend-line move"></span> 이동</span>
+        <span class="legend-item"><span class="legend-line pass"></span> 패스</span>
+      </div>` : '';
+
+    // 선수별 지침 (패스 대상 포함)
+    const startersHTML = (g.starters || []).map(pi => {
+      const passInfo = [];
+      if (pi.pass_first) passInfo.push(`1순위: ${escHtml(pi.pass_first)}`);
+      if (pi.pass_second) passInfo.push(`2순위: ${escHtml(pi.pass_second)}`);
+      const passBadge = passInfo.length
+        ? `<div class="pi-pass"><span class="pi-pass-label">패스 대상</span> ${passInfo.join(' / ')}</div>` : '';
+
+      return `
       <div class="pi-card">
         <div class="pi-head">
           <span class="pi-name">${escHtml(pi.name)}</span>
           <span class="pi-pos">${escHtml(pi.assigned_position || '')}</span>
         </div>
+        ${passBadge}
         <ul class="pi-list">
           ${(pi.instructions || []).map(t => `<li>${escHtml(t)}</li>`).join('')}
         </ul>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     const subsHTML = (g.subs || []).length
       ? `<div class="subs-box"><strong>🔄 교체 대기</strong><div class="subs-list">${(g.subs||[]).map(n=>`<span class="sub-chip">${escHtml(n)}</span>`).join('')}</div></div>`
@@ -478,7 +543,10 @@ function renderResult(d) {
         <div class="formation-box">
           <div class="formation-name">${escHtml(g.formation || '?-?-?')}</div>
           <div class="formation-desc">${escHtml(g.formation_reason || '')}</div>
+          ${attackDir}
         </div>
+        ${diagramHTML}
+        ${legendHTML}
         <div class="tactics-block">
           <strong>📋 팀 전술</strong>
           ${escHtml(g.team_tactics || '')}
@@ -498,6 +566,95 @@ function renderResult(d) {
     <div class="game-panels">${panels}</div>`;
 
   scrollToResult();
+}
+
+// ── 피치 다이어그램 렌더링 ─────────────────────
+function clamp(v, min, max) {
+  return Math.max(min || 0, Math.min(max || 100, v || 50));
+}
+
+function renderPitch(diagram, idx) {
+  // 선수 마커
+  const players = diagram.players || [];
+  const playersHTML = players.map(p => {
+    const isGK = /GK/i.test(p.role || '');
+    const ch = (p.name || '?')[0];
+    const x = clamp(p.x, 5, 95);
+    const y = clamp(p.y, 4, 96);
+    return `<div class="pp" style="left:${x}%;top:${y}%">
+      <div class="pp-dot${isGK ? ' gk' : ''}">${escHtml(ch)}</div>
+      <div class="pp-label">${escHtml(p.name)}</div>
+    </div>`;
+  }).join('');
+
+  // 이동 화살표(노란 점선) + 패스 루트(하늘색 실선)
+  const moveArrows = diagram.arrows || [];
+  const passRoutes = diagram.pass_routes || [];
+  let svgContent = '';
+  let arrowLabelsHTML = '';
+
+  if (moveArrows.length || passRoutes.length) {
+    const moveId = 'mv' + idx;
+    const passId = 'ps' + idx;
+
+    const moveLines = moveArrows.map(a => {
+      const from = players.find(p => p.name === a.player);
+      if (!from) return '';
+      const x1 = clamp(from.x, 5, 95) * 0.75;
+      const y1 = clamp(from.y, 4, 96);
+      const x2 = clamp(a.ex, 5, 95) * 0.75;
+      const y2 = clamp(a.ey, 4, 96);
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+        stroke="#ffe066" stroke-width="1.2" stroke-dasharray="3,2"
+        marker-end="url(#${moveId})" />`;
+    }).join('');
+
+    const passLines = passRoutes.map(r => {
+      const from = players.find(p => p.name === r.from);
+      const to = players.find(p => p.name === r.to);
+      if (!from || !to) return '';
+      const x1 = clamp(from.x, 5, 95) * 0.75;
+      const y1 = clamp(from.y, 4, 96);
+      const x2 = clamp(to.x, 5, 95) * 0.75;
+      const y2 = clamp(to.y, 4, 96);
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+        stroke="rgba(96,205,255,0.7)" stroke-width="0.9"
+        marker-end="url(#${passId})" />`;
+    }).join('');
+
+    svgContent = `<svg class="pitch-arrows" viewBox="0 0 75 100">
+      <defs>
+        <marker id="${moveId}" markerWidth="5" markerHeight="4" refX="4.5" refY="2" orient="auto">
+          <polygon points="0 0.3, 5 2, 0 3.7" fill="#ffe066"/>
+        </marker>
+        <marker id="${passId}" markerWidth="5" markerHeight="4" refX="4.5" refY="2" orient="auto">
+          <polygon points="0 0.3, 5 2, 0 3.7" fill="rgba(96,205,255,0.9)"/>
+        </marker>
+      </defs>
+      ${passLines}${moveLines}
+    </svg>`;
+
+    arrowLabelsHTML = moveArrows.map(a => {
+      if (!a.label) return '';
+      const ex = clamp(a.ex, 5, 95);
+      const ey = clamp(a.ey, 4, 96);
+      return `<div class="pitch-arrow-label" style="left:${ex}%;top:${ey}%">${escHtml(a.label)}</div>`;
+    }).join('');
+  }
+
+  return `
+    <div class="pitch-card">
+      <div class="pitch-card-head">📐 포메이션 배치도</div>
+      <div class="pitch">
+        <div class="pitch-pa pitch-pa-t"></div>
+        <div class="pitch-pa pitch-pa-b"></div>
+        <div class="pitch-goal-label pitch-gl-t">상대 골대</div>
+        <div class="pitch-goal-label pitch-gl-b">우리 골대</div>
+        ${svgContent}
+        ${playersHTML}
+        ${arrowLabelsHTML}
+      </div>
+    </div>`;
 }
 
 function switchGameTab(idx) {
