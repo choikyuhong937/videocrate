@@ -356,7 +356,7 @@ function buildPrompt(sel, style, opponent) {
   ).join('\n');
 
   return `당신은 아마추어 조기축구팀 전술 코치입니다.
-아래 선수 정보로 오늘 경기 포메이션과 전술을 추천해주세요.
+아래 선수 정보로 오늘 경기 포메이션·전술·포지션 배치를 추천해주세요.
 
 [출전 선수 ${sel.length}명]
 ${lines}
@@ -370,25 +370,80 @@ ${lines}
   "formation": "4-3-3",
   "formation_reason": "포메이션 선택 이유 (2문장, 쉬운 표현)",
   "team_tactics": "팀 전체 전술 요약 (3~4문장, 아마추어가 이해하기 쉽게)",
+  "attack_direction": "주 공격 방향 설명 (예: 오른쪽 측면 집중 공격, 중앙 돌파 위주 등)",
   "key_points": ["핵심 포인트 1", "핵심 포인트 2", "핵심 포인트 3"],
+  "diagrams": [
+    {
+      "title": "기본 포메이션",
+      "desc": "기본 배치 형태와 역할 요약 1~2문장",
+      "players": [
+        {"name":"선수이름","role":"GK","x":50,"y":92}
+      ],
+      "pass_routes": [
+        {"from":"선수A","to":"선수B","desc":"빌드업 시작 패스"}
+      ]
+    },
+    {
+      "title": "공격 시 움직임",
+      "desc": "공격 전환 시 형태 변화 2문장 (윙백 오버래핑 여부, 공격 루트 등)",
+      "players": [
+        {"name":"선수이름","role":"GK","x":50,"y":85}
+      ],
+      "arrows": [
+        {"player":"선수이름","ex":85,"ey":25,"label":"오버래핑"}
+      ],
+      "pass_routes": [
+        {"from":"선수A","to":"선수B","desc":"결정적 패스"}
+      ]
+    },
+    {
+      "title": "수비 시 대형",
+      "desc": "수비 전환 시 라인 높이와 압박 방식 2문장",
+      "players": [
+        {"name":"선수이름","role":"GK","x":50,"y":95}
+      ],
+      "arrows": [
+        {"player":"선수이름","ex":50,"ey":60,"label":"중앙 복귀"}
+      ]
+    }
+  ],
   "players": [
     {
       "name": "선수이름",
-      "assigned_position": "배정 포지션 예: 오른쪽 수비수",
+      "assigned_position": "배정 포지션 예: 오른쪽 윙백",
+      "pass_first": "1순위 패스 대상 선수 이름",
+      "pass_second": "2순위 패스 대상 선수 이름",
       "instructions": [
-        "아마추어가 실제 경기에서 할 수 있는 구체적 움직임 지침 1",
-        "구체적 움직임 지침 2",
-        "구체적 움직임 지침 3"
+        "이 선수의 특성에 맞는 구체적 지침 1",
+        "이 선수의 특성에 맞는 구체적 지침 2",
+        "이 선수의 특성에 맞는 구체적 지침 3",
+        "이 선수의 특성에 맞는 구체적 지침 4"
       ]
     }
   ]
 }
 
-주의:
-- 선수 ${sel.length}명 전원 포함
+좌표 규칙:
+- x: 0=왼쪽 터치라인, 50=중앙, 100=오른쪽 터치라인
+- y: 0=상대 골대, 50=하프라인, 100=우리 골대
+- GK: y=90~95, 수비수: y=72~82, 미드필더: y=45~60, 공격수: y=15~35
+- arrows의 player는 해당 다이어그램 players의 name과 동일해야 함
+- pass_routes의 from, to는 해당 다이어그램 players의 name과 동일해야 함
+
+중요:
+- 선수 ${sel.length}명 전원 diagrams 각 다이어그램과 players 배열에 포함
+- diagrams는 정확히 3개 (기본, 공격, 수비)
+- arrows는 공격/수비 다이어그램에서 핵심 이동 2~4개
+- pass_routes는 각 다이어그램에서 주요 패스 연결 3~5개
+- 각 선수의 pass_first, pass_second 반드시 포함 (패스 1순위, 2순위 대상)
+- 각 선수의 instructions는 반드시 그 선수의 실력·체력·스피드·성향·특기를 반영하여 차별화
+  예) 스피드 빠른 선수 → "공간이 보이면 전속력으로 전방 침투"
+  예) 체력 약한 선수 → "전반에 집중하고 불필요한 달리기 줄이기"
+  예) 수비적 성향 → "공격 시에도 뒷공간 항상 체크"
+  예) 패스 특기 → "중앙에서 볼 받으면 ${sel[0]?.name || '공격수'}에게 스루패스 노리기"
+- instructions에 패스 대상 선수 이름을 직접 언급 (예: "공 잡으면 먼저 홍길동 찾기")
 - 아마추어 조기축구 수준에 맞는 현실적 지침
-- 전문 용어 사용 금지, 쉬운 한국어로
-- 각 선수의 실력/특성 반드시 반영`;
+- 전문 용어 사용 금지, 쉬운 한국어로`;
 }
 
 async function callGemini(key, prompt) {
@@ -398,7 +453,7 @@ async function callGemini(key, prompt) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
+      generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
     })
   });
   if (!res.ok) {
@@ -433,34 +488,164 @@ function renderResult(d) {
     return;
   }
 
+  // 포메이션 박스 + 공격 방향
+  const attackDir = d.attack_direction
+    ? `<div class="attack-dir-badge">${escHtml(d.attack_direction)}</div>` : '';
+
+  const formationBox = `
+    <div class="formation-box">
+      <div class="formation-name">${escHtml(d.formation || '?-?-?')}</div>
+      <div class="formation-desc">${escHtml(d.formation_reason || '')}</div>
+      ${attackDir}
+    </div>`;
+
+  // 피치 다이어그램
+  let diagramsHTML = '';
+  if (d.diagrams && d.diagrams.length) {
+    diagramsHTML = `
+      <div class="diagrams-section">
+        <h4>📐 포메이션 다이어그램</h4>
+        ${d.diagrams.map((dia, i) => renderPitch(dia, i)).join('')}
+        <div class="diagram-legend">
+          <span class="legend-item"><span class="legend-dot"></span> 선수 위치</span>
+          <span class="legend-item"><span class="legend-dot gk"></span> 골키퍼</span>
+          <span class="legend-item"><span class="legend-line move"></span> 이동</span>
+          <span class="legend-item"><span class="legend-line pass"></span> 패스</span>
+        </div>
+      </div>`;
+  }
+
+  // 팀 전술
   const kpHTML = (d.key_points || []).map(kp => `<li>${escHtml(kp)}</li>`).join('');
-  const piHTML = (d.players || []).map(pi => `
+  const tacticsBlock = `
+    <div class="tactics-block">
+      <strong>📋 팀 전술 요약</strong>
+      ${escHtml(d.team_tactics || '')}
+      ${kpHTML ? `<ul class="key-points">${kpHTML}</ul>` : ''}
+    </div>`;
+
+  // 선수별 지침 (패스 대상 포함)
+  const piHTML = (d.players || []).map(pi => {
+    const passInfo = [];
+    if (pi.pass_first) passInfo.push(`1순위: ${escHtml(pi.pass_first)}`);
+    if (pi.pass_second) passInfo.push(`2순위: ${escHtml(pi.pass_second)}`);
+    const passBadge = passInfo.length
+      ? `<div class="pi-pass"><span class="pi-pass-label">패스 대상</span> ${passInfo.join(' / ')}</div>` : '';
+
+    return `
     <div class="pi-card">
       <div class="pi-head">
         <span class="pi-name">${escHtml(pi.name)}</span>
         <span class="pi-pos">${escHtml(pi.assigned_position || '')}</span>
       </div>
+      ${passBadge}
       <ul class="pi-list">
         ${(pi.instructions || []).map(t => `<li>${escHtml(t)}</li>`).join('')}
       </ul>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
-  box.innerHTML = `
-    <div class="formation-box">
-      <div class="formation-name">${escHtml(d.formation || '?-?-?')}</div>
-      <div class="formation-desc">${escHtml(d.formation_reason || '')}</div>
-    </div>
-    <div class="tactics-block">
-      <strong>📋 팀 전술 요약</strong>
-      ${escHtml(d.team_tactics || '')}
-      ${kpHTML ? `<ul class="key-points">${kpHTML}</ul>` : ''}
-    </div>
+  const playersSection = `
     <div class="players-section">
       <h4>👤 선수별 개인 지침</h4>
       ${piHTML}
     </div>`;
 
+  box.innerHTML = formationBox + diagramsHTML + tacticsBlock + playersSection;
   scrollToResult();
+}
+
+// ── 피치 다이어그램 렌더링 ─────────────────────
+function clamp(v, min, max) {
+  return Math.max(min || 0, Math.min(max || 100, v || 50));
+}
+
+function renderPitch(diagram, idx) {
+  // 선수 마커
+  const playersHTML = (diagram.players || []).map(p => {
+    const isGK = /GK/i.test(p.role || '');
+    const ch = (p.name || '?')[0];
+    const x = clamp(p.x, 5, 95);
+    const y = clamp(p.y, 4, 96);
+    return `<div class="pp" style="left:${x}%;top:${y}%">
+      <div class="pp-dot${isGK ? ' gk' : ''}">${escHtml(ch)}</div>
+      <div class="pp-label">${escHtml(p.name)}</div>
+    </div>`;
+  }).join('');
+
+  // 이동 화살표 (노란 점선) + 패스 루트 (하늘색 실선)
+  const moveArrows = diagram.arrows || [];
+  const passRoutes = diagram.pass_routes || [];
+  let svgContent = '';
+  let arrowLabelsHTML = '';
+
+  if (moveArrows.length || passRoutes.length) {
+    const moveId = 'mv' + idx;
+    const passId = 'ps' + idx;
+    const players = diagram.players || [];
+
+    // 이동 화살표
+    const moveLines = moveArrows.map(a => {
+      const from = players.find(p => p.name === a.player);
+      if (!from) return '';
+      const x1 = clamp(from.x, 5, 95) * 0.75;
+      const y1 = clamp(from.y, 4, 96);
+      const x2 = clamp(a.ex, 5, 95) * 0.75;
+      const y2 = clamp(a.ey, 4, 96);
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+        stroke="#ffe066" stroke-width="1.2" stroke-dasharray="3,2"
+        marker-end="url(#${moveId})" />`;
+    }).join('');
+
+    // 패스 루트
+    const passLines = passRoutes.map(r => {
+      const from = players.find(p => p.name === r.from);
+      const to = players.find(p => p.name === r.to);
+      if (!from || !to) return '';
+      const x1 = clamp(from.x, 5, 95) * 0.75;
+      const y1 = clamp(from.y, 4, 96);
+      const x2 = clamp(to.x, 5, 95) * 0.75;
+      const y2 = clamp(to.y, 4, 96);
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+        stroke="rgba(96,205,255,0.7)" stroke-width="0.9"
+        marker-end="url(#${passId})" />`;
+    }).join('');
+
+    svgContent = `<svg class="pitch-arrows" viewBox="0 0 75 100">
+      <defs>
+        <marker id="${moveId}" markerWidth="5" markerHeight="4" refX="4.5" refY="2" orient="auto">
+          <polygon points="0 0.3, 5 2, 0 3.7" fill="#ffe066"/>
+        </marker>
+        <marker id="${passId}" markerWidth="5" markerHeight="4" refX="4.5" refY="2" orient="auto">
+          <polygon points="0 0.3, 5 2, 0 3.7" fill="rgba(96,205,255,0.9)"/>
+        </marker>
+      </defs>
+      ${moveLines}${passLines}
+    </svg>`;
+
+    // 이동 라벨
+    arrowLabelsHTML = moveArrows.map(a => {
+      if (!a.label) return '';
+      const ex = clamp(a.ex, 5, 95);
+      const ey = clamp(a.ey, 4, 96);
+      return `<div class="pitch-arrow-label" style="left:${ex}%;top:${ey}%">${escHtml(a.label)}</div>`;
+    }).join('');
+  }
+
+  return `
+    <div class="pitch-card">
+      <div class="pitch-card-head">${escHtml(diagram.title)}</div>
+      <div class="pitch-card-desc">${escHtml(diagram.desc || '')}</div>
+      <div class="pitch">
+        <div class="pitch-pa pitch-pa-t"></div>
+        <div class="pitch-pa pitch-pa-b"></div>
+        <div class="pitch-goal-label pitch-gl-t">상대 골대</div>
+        <div class="pitch-goal-label pitch-gl-b">우리 골대</div>
+        ${svgContent}
+        ${playersHTML}
+        ${arrowLabelsHTML}
+      </div>
+    </div>`;
 }
 
 function scrollToResult() {
