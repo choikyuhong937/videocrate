@@ -73,7 +73,6 @@ async function shareApp() {
     } catch {}
     return;
   }
-  // 공유 API 미지원 → 클립보드 복사
   try {
     await navigator.clipboard.writeText(url);
     showToast('링크가 복사되었습니다! 카톡에 붙여넣기 하세요 📋');
@@ -85,10 +84,10 @@ async function shareApp() {
 async function shareResult() {
   const resultEl = document.getElementById('ai-result-content');
   const formation = resultEl.querySelector('.formation-name')?.textContent || '';
-  const text = `⚽ 오늘 조기축구 전술\n포메이션: ${formation}\n\n감독실에서 AI 전술 받기 →\nhttps://choikyuhong937.github.io/videocrate/`;
+  const text = `⚽ 오늘 조기축구 4경기 로테이션\n${formation}\n\n감독실에서 AI 전술 받기 →\nhttps://choikyuhong937.github.io/videocrate/`;
 
   if (navigator.share) {
-    try { await navigator.share({ title: '오늘 조기축구 전술', text }); return; } catch {}
+    try { await navigator.share({ title: '오늘 조기축구 4경기 로테이션', text }); return; } catch {}
   }
   try {
     await navigator.clipboard.writeText(text);
@@ -134,12 +133,19 @@ function renderMatchPlayers() {
   updateCount();
 }
 
+// 포지션 배열 반환 (구버전 단일 문자열 호환)
+function getPositions(p) {
+  if (Array.isArray(p.positions) && p.positions.length) return p.positions;
+  if (p.position) return [p.position];
+  return [];
+}
+
 function cardHTML(p, selectable) {
   const sel = selectable && selectedIds.has(p.id);
   const lvEmoji = { '초급': '🌱', '중급': '⚽', '고급': '🌟' }[p.level] || '';
   const skills = (p.skills || []).map(s => `<span class="tag g">${s}</span>`).join('');
   const styles = (p.styles || []).map(s => `<span class="tag">${s}</span>`).join('');
-  const numBadge = p.number ? `<span class="player-num">${p.number}</span>` : '';
+  const posBadges = getPositions(p).map(pos => `<span class="pos-badge">${pos}</span>`).join('');
 
   const clickAttr = selectable ? `onclick="toggleSelect('${p.id}')"` : '';
   const check = selectable
@@ -155,9 +161,8 @@ function cardHTML(p, selectable) {
   return `
     <div class="player-card ${sel ? 'selected' : ''}" ${clickAttr}>
       ${check}
-      ${numBadge}
       <div class="player-name-text">${escHtml(p.name)}</div>
-      <span class="pos-badge">${p.position}</span>
+      <div class="pos-badges">${posBadges}</div>
       <div class="card-tags">
         <span class="tag">${lvEmoji} ${p.level}</span>
         ${p.speed !== '보통' ? `<span class="tag">${p.speed}</span>` : ''}
@@ -185,7 +190,6 @@ function openAddPlayerModal() {
   document.getElementById('modal-title').textContent = '선수 추가';
   document.getElementById('modal-player-id').value = '';
   document.getElementById('modal-name').value = '';
-  document.getElementById('modal-number').value = '';
   document.getElementById('modal-speed').value = '보통';
   document.getElementById('modal-stamina').value = '보통';
   document.getElementById('modal-note').value = '';
@@ -202,7 +206,6 @@ function openEditModal(id) {
   document.getElementById('modal-title').textContent = '선수 수정';
   document.getElementById('modal-player-id').value = p.id;
   document.getElementById('modal-name').value = p.name;
-  document.getElementById('modal-number').value = p.number || '';
   document.getElementById('modal-speed').value = p.speed;
   document.getElementById('modal-stamina').value = p.stamina;
   document.getElementById('modal-note').value = p.note || '';
@@ -212,9 +215,10 @@ function openEditModal(id) {
   resetChips('skill-picker');
   resetChips('level-picker');
 
-  // 포지션
+  // 포지션 (복수 선택)
+  const positions = getPositions(p);
   document.querySelectorAll('#position-picker .pos-chip').forEach(b => {
-    if (b.dataset.pos === p.position) b.classList.add('active');
+    if (positions.includes(b.dataset.pos)) b.classList.add('active');
   });
   // 레벨
   document.querySelectorAll('#level-picker .level-chip').forEach(b => {
@@ -234,7 +238,6 @@ function openEditModal(id) {
 
 function openModal() {
   document.getElementById('player-modal').classList.remove('hidden');
-  // 첫 입력란에 포커스 (살짝 딜레이)
   setTimeout(() => document.getElementById('modal-name').focus(), 250);
 }
 
@@ -246,8 +249,8 @@ function savePlayer() {
   const name = document.getElementById('modal-name').value.trim();
   if (!name) { alert('이름을 입력해주세요.'); return; }
 
-  const posEl = document.querySelector('#position-picker .pos-chip.active');
-  if (!posEl) { alert('포지션을 선택해주세요.'); return; }
+  const positions = [...document.querySelectorAll('#position-picker .pos-chip.active')].map(b => b.dataset.pos);
+  if (!positions.length) { alert('포지션을 선택해주세요.'); return; }
 
   const lvEl = document.querySelector('#level-picker .level-chip.active');
   const styles = [...document.querySelectorAll('#style-picker .tag-chip.active')].map(b => b.dataset.val);
@@ -255,8 +258,8 @@ function savePlayer() {
 
   const data = {
     name,
-    number: document.getElementById('modal-number').value || '',
-    position: posEl.dataset.pos,
+    positions,
+    position: positions[0], // 하위 호환
     level: lvEl ? lvEl.dataset.level : '중급',
     speed: document.getElementById('modal-speed').value,
     stamina: document.getElementById('modal-stamina').value,
@@ -291,13 +294,11 @@ function deletePlayer(id) {
 
 // ── 칩 피커 초기화 ────────────────────────────
 function initChipPickers() {
-  // 포지션, 레벨: 단일 선택
+  // 포지션: 복수 선택
   document.querySelectorAll('#position-picker .pos-chip').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('#position-picker .pos-chip').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-    });
+    btn.addEventListener('click', () => btn.classList.toggle('active'));
   });
+  // 레벨: 단일 선택
   document.querySelectorAll('#level-picker .level-chip').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('#level-picker .level-chip').forEach(b => b.classList.remove('active'));
@@ -320,7 +321,7 @@ function setChipActive(pickerId, selector, value, dataAttr) {
 }
 
 // ══════════════════════════════════════════════
-//  AI 전술 추천 (Gemini)
+//  AI 전술 추천 (Gemini) — 4경기 로테이션
 // ══════════════════════════════════════════════
 async function getTacticsFromAI() {
   if (!getApiKey()) {
@@ -329,10 +330,10 @@ async function getTacticsFromAI() {
     return;
   }
   const sel = players.filter(p => selectedIds.has(p.id));
-  if (sel.length < 5) { showToast('최소 5명 이상 선택해주세요'); return; }
+  if (sel.length < 11) { showToast('최소 11명 이상 선택해주세요'); return; }
 
-  const style     = document.getElementById('preferred-style').value;
-  const opponent  = document.getElementById('opponent-level').value;
+  const style    = document.getElementById('preferred-style').value;
+  const opponent = document.getElementById('opponent-level').value;
 
   showLoading(true);
   document.getElementById('ai-result').classList.add('hidden');
@@ -342,7 +343,7 @@ async function getTacticsFromAI() {
     const response = await callGemini(getApiKey(), prompt);
     const text     = response?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) throw new Error('AI 응답이 비어있습니다.');
-    const parsed = parseAI(text, sel);
+    const parsed = parseAI(text);
     renderResult(parsed);
   } catch (err) {
     showToast('오류: ' + err.message);
@@ -353,14 +354,19 @@ async function getTacticsFromAI() {
 }
 
 function buildPrompt(sel, style, opponent) {
-  const lines = sel.map((p, i) =>
-    `${i+1}. ${p.name} | 포지션: ${p.position} | 실력: ${p.level} | 스피드: ${p.speed} | 체력: ${p.stamina} | 성향: ${(p.styles||[]).join(',') || '없음'} | 특기: ${(p.skills||[]).join(',') || '없음'}`
-  ).join('\n');
+  const total = sel.length;
+  const subCount = total - 11;
+  const lines = sel.map((p, i) => {
+    const positions = getPositions(p).join('/');
+    return `${i+1}. ${p.name} | 가능포지션: ${positions} | 실력: ${p.level} | 스피드: ${p.speed} | 체력: ${p.stamina} | 성향: ${(p.styles||[]).join(',') || '없음'} | 특기: ${(p.skills||[]).join(',') || '없음'}`;
+  }).join('\n');
 
   return `당신은 아마추어 조기축구팀 전술 코치입니다.
-아래 선수 정보로 오늘 경기 포메이션과 전술을 추천해주세요.
+오늘 총 4경기를 진행합니다. 전체 선수 ${total}명 중 매 경기 11명이 선발 출전하고 ${subCount}명은 교체 대기합니다.
+모든 선수가 4경기에 걸쳐 최대한 공평하게 선발 출전 기회를 가지도록 로테이션을 구성해주세요.
+각 선수의 가능한 포지션을 반드시 반영하여 포메이션을 짜주세요.
 
-[출전 선수 ${sel.length}명]
+[전체 선수 ${total}명]
 ${lines}
 
 [감독 희망 스타일]: ${style}
@@ -369,28 +375,37 @@ ${lines}
 아래 JSON 형식으로만 출력하세요. 다른 텍스트 절대 금지:
 
 {
-  "formation": "4-3-3",
-  "formation_reason": "포메이션 선택 이유 (2문장, 쉬운 표현)",
-  "team_tactics": "팀 전체 전술 요약 (3~4문장, 아마추어가 이해하기 쉽게)",
-  "key_points": ["핵심 포인트 1", "핵심 포인트 2", "핵심 포인트 3"],
-  "players": [
+  "rotation_summary": "전체 로테이션 요약 (각 선수 선발 횟수 언급, 2~3문장)",
+  "games": [
     {
-      "name": "선수이름",
-      "assigned_position": "배정 포지션 예: 오른쪽 수비수",
-      "instructions": [
-        "아마추어가 실제 경기에서 할 수 있는 구체적 움직임 지침 1",
-        "구체적 움직임 지침 2",
-        "구체적 움직임 지침 3"
-      ]
+      "game": 1,
+      "formation": "4-3-3",
+      "formation_reason": "포메이션 선택 이유 (1~2문장, 쉬운 표현)",
+      "team_tactics": "팀 전체 전술 요약 (2~3문장, 아마추어가 이해하기 쉽게)",
+      "key_points": ["핵심 포인트 1", "핵심 포인트 2", "핵심 포인트 3"],
+      "starters": [
+        {
+          "name": "선수이름",
+          "assigned_position": "배정 포지션 (예: 오른쪽 수비수)",
+          "instructions": [
+            "아마추어가 실제 경기에서 할 수 있는 구체적 움직임 지침 1",
+            "구체적 움직임 지침 2"
+          ]
+        }
+      ],
+      "subs": ["교체선수1", "교체선수2"]
     }
   ]
 }
 
 주의:
-- 선수 ${sel.length}명 전원 포함
-- 아마추어 조기축구 수준에 맞는 현실적 지침
-- 전문 용어 사용 금지, 쉬운 한국어로
-- 각 선수의 실력/특성 반드시 반영`;
+- 4경기 모두 포함 (game: 1, 2, 3, 4)
+- 각 경기 starters 정확히 11명
+- subs는 나머지 ${subCount}명 (이름만)
+- 모든 선수 이름은 위 명단 그대로 사용
+- 선수의 가능한 포지션 내에서 배정
+- 아마추어 수준에 맞는 현실적 지침
+- 전문 용어 사용 금지, 쉬운 한국어로`;
 }
 
 async function callGemini(key, prompt) {
@@ -400,7 +415,7 @@ async function callGemini(key, prompt) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
+      generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
     })
   });
   if (!res.ok) {
@@ -411,20 +426,16 @@ async function callGemini(key, prompt) {
   return res.json();
 }
 
-function parseAI(text, sel) {
+function parseAI(text) {
   const m = text.match(/```json\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\})/);
   try {
-    const d = JSON.parse(m ? m[1].trim() : text.trim());
-    if (d.players) d.players = d.players.map(pi => ({
-      ...pi,
-      _orig: sel.find(s => s.name === pi.name) || {}
-    }));
-    return d;
+    return JSON.parse(m ? m[1].trim() : text.trim());
   } catch {
     return { raw: text };
   }
 }
 
+// ── 결과 렌더링: 4경기 탭 ─────────────────────
 function renderResult(d) {
   const box = document.getElementById('ai-result-content');
   document.getElementById('ai-result').classList.remove('hidden');
@@ -435,34 +446,63 @@ function renderResult(d) {
     return;
   }
 
-  const kpHTML = (d.key_points || []).map(kp => `<li>${escHtml(kp)}</li>`).join('');
-  const piHTML = (d.players || []).map(pi => `
-    <div class="pi-card">
-      <div class="pi-head">
-        <span class="pi-name">${escHtml(pi.name)}</span>
-        <span class="pi-pos">${escHtml(pi.assigned_position || '')}</span>
-      </div>
-      <ul class="pi-list">
-        ${(pi.instructions || []).map(t => `<li>${escHtml(t)}</li>`).join('')}
-      </ul>
-    </div>`).join('');
+  const games = d.games || [];
+
+  const summaryHTML = d.rotation_summary
+    ? `<div class="rotation-summary"><strong>🔄 로테이션 요약</strong><p>${escHtml(d.rotation_summary)}</p></div>`
+    : '';
+
+  const tabBtns = games.map((g, i) =>
+    `<button class="game-tab-btn ${i === 0 ? 'active' : ''}" onclick="switchGameTab(${i})">${g.game}경기</button>`
+  ).join('');
+
+  const panels = games.map((g, i) => {
+    const kpHTML = (g.key_points || []).map(kp => `<li>${escHtml(kp)}</li>`).join('');
+    const startersHTML = (g.starters || []).map(pi => `
+      <div class="pi-card">
+        <div class="pi-head">
+          <span class="pi-name">${escHtml(pi.name)}</span>
+          <span class="pi-pos">${escHtml(pi.assigned_position || '')}</span>
+        </div>
+        <ul class="pi-list">
+          ${(pi.instructions || []).map(t => `<li>${escHtml(t)}</li>`).join('')}
+        </ul>
+      </div>`).join('');
+
+    const subsHTML = (g.subs || []).length
+      ? `<div class="subs-box"><strong>🔄 교체 대기</strong><div class="subs-list">${(g.subs||[]).map(n=>`<span class="sub-chip">${escHtml(n)}</span>`).join('')}</div></div>`
+      : '';
+
+    return `
+      <div class="game-panel ${i === 0 ? 'active' : ''}" id="game-panel-${i}">
+        <div class="formation-box">
+          <div class="formation-name">${escHtml(g.formation || '?-?-?')}</div>
+          <div class="formation-desc">${escHtml(g.formation_reason || '')}</div>
+        </div>
+        <div class="tactics-block">
+          <strong>📋 팀 전술</strong>
+          ${escHtml(g.team_tactics || '')}
+          ${kpHTML ? `<ul class="key-points">${kpHTML}</ul>` : ''}
+        </div>
+        ${subsHTML}
+        <div class="players-section">
+          <h4>👤 선발 11명 개인 지침</h4>
+          ${startersHTML}
+        </div>
+      </div>`;
+  }).join('');
 
   box.innerHTML = `
-    <div class="formation-box">
-      <div class="formation-name">${escHtml(d.formation || '?-?-?')}</div>
-      <div class="formation-desc">${escHtml(d.formation_reason || '')}</div>
-    </div>
-    <div class="tactics-block">
-      <strong>📋 팀 전술 요약</strong>
-      ${escHtml(d.team_tactics || '')}
-      ${kpHTML ? `<ul class="key-points">${kpHTML}</ul>` : ''}
-    </div>
-    <div class="players-section">
-      <h4>👤 선수별 개인 지침</h4>
-      ${piHTML}
-    </div>`;
+    ${summaryHTML}
+    <div class="game-tabs">${tabBtns}</div>
+    <div class="game-panels">${panels}</div>`;
 
   scrollToResult();
+}
+
+function switchGameTab(idx) {
+  document.querySelectorAll('.game-tab-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+  document.querySelectorAll('.game-panel').forEach((p, i) => p.classList.toggle('active', i === idx));
 }
 
 function scrollToResult() {
