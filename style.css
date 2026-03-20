@@ -421,21 +421,14 @@ main { padding: 16px 12px; }
   padding: 2px 8px;
   border-radius: 20px;
 }
-.pi-list { list-style: none; }
-.pi-list li {
-  padding: 4px 0 4px 16px;
-  position: relative;
+.pi-tactic {
   font-size: .82rem;
   color: var(--gray-700);
-  line-height: 1.5;
-}
-.pi-list li::before {
-  content: '▶';
-  position: absolute;
-  left: 0;
-  color: var(--green);
-  font-size: .58rem;
-  top: 7px;
+  line-height: 1.55;
+  padding: 6px 10px;
+  background: #f0fdf4;
+  border-left: 3px solid var(--green);
+  border-radius: 0 6px 6px 0;
 }
 
 /* ===== 설정 ===== */
@@ -924,26 +917,6 @@ textarea { resize: vertical; min-height: 64px; }
 .legend-line.move { border-top: 2px dashed #ffe066; }
 .legend-line.pass { border-top: 2px solid #60cdff; }
 
-/* 패스 대상 뱃지 */
-.pi-pass {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 8px;
-  padding: 6px 10px;
-  margin-bottom: 8px;
-  font-size: .78rem;
-  color: #1e40af;
-  font-weight: 600;
-}
-.pi-pass-label {
-  background: #2563eb;
-  color: white;
-  font-size: .65rem;
-  font-weight: 800;
-  padding: 2px 6px;
-  border-radius: 10px;
-  margin-right: 6px;
-}
 
 /* ===== 데스크탑 보정 (태블릿/PC에서도 보기 좋게) ===== */
 @media (min-width: 600px) {
