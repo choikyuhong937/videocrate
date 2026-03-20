@@ -648,6 +648,95 @@ textarea { resize: vertical; min-height: 64px; }
 .toast.hidden { display: none; }
 @keyframes fadeIn { from { opacity:0; transform:translateX(-50%) translateY(8px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
 
+/* ===== 포지션 복수 뱃지 ===== */
+.pos-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-bottom: 6px;
+}
+
+/* ===== 로테이션 요약 ===== */
+.rotation-summary {
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: var(--r);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-size: .85rem;
+  line-height: 1.6;
+  color: var(--gray-700);
+}
+.rotation-summary strong {
+  display: block;
+  color: var(--blue);
+  font-size: .82rem;
+  margin-bottom: 5px;
+}
+
+/* ===== 4경기 탭 ===== */
+.game-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+.game-tab-btn {
+  flex-shrink: 0;
+  background: var(--gray-100);
+  border: 1.5px solid var(--gray-200);
+  border-radius: 20px;
+  padding: 7px 18px;
+  font-size: .85rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--gray-500);
+  font-family: inherit;
+  transition: all .12s;
+  touch-action: manipulation;
+}
+.game-tab-btn.active {
+  background: var(--green);
+  border-color: var(--green);
+  color: white;
+}
+.game-tab-btn:active { transform: scale(.95); }
+
+.game-panel { display: none; }
+.game-panel.active { display: block; }
+
+/* ===== 교체 대기 ===== */
+.subs-box {
+  background: #fef9c3;
+  border: 1.5px solid #fde68a;
+  border-radius: var(--r);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-size: .85rem;
+}
+.subs-box strong {
+  display: block;
+  color: #92400e;
+  font-size: .8rem;
+  margin-bottom: 8px;
+}
+.subs-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.sub-chip {
+  background: white;
+  border: 1.5px solid #fde68a;
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: .78rem;
+  font-weight: 600;
+  color: #78350f;
+}
+
 /* ===== 데스크탑 보정 (태블릿/PC에서도 보기 좋게) ===== */
 @media (min-width: 600px) {
   body { max-width: 480px; margin: 0 auto; }

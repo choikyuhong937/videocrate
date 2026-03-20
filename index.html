@@ -58,7 +58,7 @@
         <h2>오늘 경기</h2>
         <span class="badge-count" id="selected-count">0명</span>
       </div>
-      <p class="hint">출전 선수를 탭해서 선택하세요 (최소 5명)</p>
+      <p class="hint">출전 선수를 탭해서 선택하세요 (최소 11명 — 4경기 선발 로테이션)</p>
       <div id="match-player-list" class="player-grid selectable"></div>
 
       <div class="tactics-controls">
@@ -83,14 +83,14 @@
           </div>
         </div>
         <button class="btn-ai" onclick="getTacticsFromAI()">
-          🤖 AI 전술 추천 받기
+          🤖 4경기 로테이션 전술 짜기
         </button>
       </div>
 
       <!-- AI 결과 -->
       <div id="ai-result" class="ai-result hidden">
         <div class="ai-result-header">
-          <span>🎯 AI 전술 분석 결과</span>
+          <span>🎯 4경기 로테이션 전술</span>
           <button class="share-result-btn" onclick="shareResult()" title="결과 공유">공유</button>
         </div>
         <div id="ai-result-content"></div>
@@ -167,19 +167,13 @@
       <div class="modal-body">
         <input type="hidden" id="modal-player-id" />
 
-        <div class="form-row-2">
-          <div class="form-group">
-            <label>이름 *</label>
-            <input type="text" id="modal-name" placeholder="홍길동" />
-          </div>
-          <div class="form-group form-group-sm">
-            <label>등번호</label>
-            <input type="number" id="modal-number" placeholder="10" min="1" max="99" />
-          </div>
+        <div class="form-group">
+          <label>이름 *</label>
+          <input type="text" id="modal-name" placeholder="홍길동" />
         </div>
 
         <div class="form-group">
-          <label>포지션 선호도 *</label>
+          <label>포지션 (복수 선택 가능) *</label>
           <div class="chip-group" id="position-picker">
             <button type="button" class="chip pos-chip" data-pos="GK">GK</button>
             <button type="button" class="chip pos-chip" data-pos="CB">CB</button>
@@ -259,7 +253,7 @@
   <div id="loading-overlay" class="modal-overlay hidden">
     <div class="loading-box">
       <div class="ball-spinner">⚽</div>
-      <p>AI가 전술 분석 중...</p>
+      <p>AI가 4경기 로테이션 분석 중...</p>
       <small>잠시만 기다려주세요</small>
     </div>
   </div>
