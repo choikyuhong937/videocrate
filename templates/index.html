@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>TripVideo</title>
+    <style>
+        :root {
+            --bg: #0a0a0f; --surface: #151520; --surface2: #1c1c2c;
+            --border: #282840; --text: #eeeef4; --dim: #7878a0;
+            --accent: #7c6aef; --accent-l: #a594ff; --accent-bg: rgba(124,106,239,0.12);
+            --green: #4ade80; --red: #f87171;
+            --grad: linear-gradient(135deg, #7c6aef 0%, #c084fc 100%);
+            --safe-b: env(safe-area-inset-bottom, 0px);
+        }
+        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+        body { font-family: -apple-system, 'Pretendard', system-ui, sans-serif; background:var(--bg); color:var(--text); min-height:100vh; min-height:100dvh; overflow-x:hidden; }
+        .app { max-width:480px; margin:0 auto; padding:20px 16px; padding-bottom:calc(20px + var(--safe-b)); min-height:100vh; min-height:100dvh; display:flex; flex-direction:column; }
+        .screen { display:none; flex:1; flex-direction:column; }
+        .screen.active { display:flex; }
+
+        .brand { text-align:center; padding:32px 0 8px; }
+        .brand-icon { font-size:40px; margin-bottom:8px; }
+        .brand h1 { font-size:24px; font-weight:700; background:var(--grad); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+        .brand p { color:var(--dim); font-size:13px; margin-top:6px; line-height:1.5; }
+
+        .card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:20px; margin-bottom:16px; }
+        .form-group { margin-bottom:16px; }
+        .form-label { font-size:12px; font-weight:600; color:var(--dim); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; display:block; }
+        .form-input { width:100%; padding:14px 16px; background:var(--surface2); border:1.5px solid var(--border); border-radius:10px; color:var(--text); font-size:16px; outline:none; transition:border 0.2s; }
+        .form-input:focus { border-color:var(--accent); }
+        .form-input::placeholder { color:var(--dim); font-size:14px; }
+        .form-hint { font-size:11px; color:var(--dim); margin-top:5px; }
+        .form-hint a { color:var(--accent-l); text-decoration:none; }
+        .input-wrap { position:relative; }
+        .input-toggle { position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--dim); font-size:18px; cursor:pointer; padding:4px; }
+
+        .btn { width:100%; padding:16px; background:var(--grad); border:none; border-radius:12px; color:#fff; font-size:16px; font-weight:600; cursor:pointer; transition:all 0.2s; -webkit-appearance:none; }
+        .btn:active:not(:disabled) { transform:scale(0.98); opacity:0.9; }
+        .btn:disabled { opacity:0.4; cursor:default; }
+        .btn-outline { background:var(--surface2); border:1.5px solid var(--border); color:var(--text); }
+        .btn-row { display:flex; gap:10px; }
+        .btn-row .btn { flex:1; }
+
+        .google-btn {
+            width:100%; padding:16px 20px; background:#fff; border:none; border-radius:12px;
+            color:#333; font-size:16px; font-weight:600; cursor:pointer; transition:all 0.2s;
+            display:flex; align-items:center; justify-content:center; gap:12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        .google-btn:active { transform:scale(0.98); }
+        .google-btn svg { width:20px; height:20px; flex-shrink:0; }
+
+        .trip-card { display:flex; align-items:center; gap:12px; padding:14px; border-radius:12px; background:var(--surface2); border:2px solid transparent; cursor:pointer; transition:all 0.2s; user-select:none; margin-bottom:10px; }
+        .trip-card:active { opacity:0.85; }
+        .trip-card.selected { border-color:var(--accent); background:var(--accent-bg); }
+        .trip-thumb { width:56px; height:56px; border-radius:8px; object-fit:cover; flex-shrink:0; background:var(--border); }
+        .trip-thumb-empty { width:56px; height:56px; border-radius:8px; flex-shrink:0; background:var(--border); display:flex; align-items:center; justify-content:center; font-size:22px; }
+        .trip-info { flex:1; min-width:0; }
+        .trip-name { font-size:15px; font-weight:600; margin-bottom:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .trip-meta { font-size:12px; color:var(--dim); }
+        .trip-check { width:24px; height:24px; border-radius:50%; border:2px solid var(--border); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:12px; color:transparent; transition:all 0.2s; }
+        .trip-card.selected .trip-check { border-color:var(--accent); background:var(--accent); color:#fff; }
+        .section-title { font-size:16px; font-weight:600; margin-bottom:14px; }
+
+        .settings { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
+        .settings .form-group { margin-bottom:0; }
+        .settings select { width:100%; padding:12px; background:var(--surface2); border:1.5px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; outline:none; -webkit-appearance:none; appearance:none; }
+
+        .spinner { width:14px; height:14px; border:2px solid var(--accent-bg); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; display:inline-block; }
+        .spinner-lg { width:36px; height:36px; border-width:3px; margin:0 auto 14px; display:block; }
+        @keyframes spin { to { transform:rotate(360deg) } }
+
+        .step { display:flex; align-items:center; gap:12px; padding:10px 0; }
+        .step-dot { width:28px; height:28px; border-radius:50%; border:2px solid var(--border); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:12px; background:var(--surface2); transition:all .3s; }
+        .step.active .step-dot { border-color:var(--accent); background:var(--accent-bg); }
+        .step.done .step-dot { border-color:var(--green); background:rgba(74,222,128,0.12); }
+        .step-text h4 { font-size:13px; font-weight:500; }
+        .step.active h4 { color:var(--accent-l); }
+        .step.done h4 { color:var(--green); }
+        .step.pending h4 { color:var(--dim); }
+        .step-text p { font-size:11px; color:var(--dim); }
+
+        .video-player { width:100%; border-radius:12px; background:#000; margin-bottom:16px; }
+        .result-badges { display:flex; justify-content:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+        .badge { padding:5px 12px; background:var(--surface2); border-radius:14px; font-size:11px; color:var(--dim); }
+        .badge b { color:var(--text); font-weight:500; }
+
+        .error-msg { background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.25); border-radius:10px; padding:12px; color:var(--red); text-align:center; font-size:13px; display:none; margin-top:12px; }
+        .error-msg.show { display:block; }
+
+        .user-bar { display:flex; align-items:center; justify-content:space-between; padding:10px 0; margin-bottom:8px; }
+        .user-info { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--dim); min-width:0; }
+        .user-avatar { width:28px; height:28px; border-radius:50%; background:var(--accent-bg); display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; color:var(--accent-l); font-weight:600; overflow:hidden; }
+        .user-avatar img { width:100%; height:100%; object-fit:cover; }
+        .logout-btn { background:none; border:none; color:var(--dim); font-size:12px; cursor:pointer; padding:6px 10px; border-radius:6px; }
+
+        .spacer { flex:1; }
+        .center-text { text-align:center; }
+        .mt8 { margin-top:8px; }
+        .mt16 { margin-top:16px; }
+        .link { color:var(--accent-l); text-decoration:none; font-size:13px; }
+
+        .fetch-progress { text-align:center; padding:24px 0; }
+        .fetch-progress .emoji { font-size:48px; margin-bottom:16px; animation: bounce 1.5s ease infinite; }
+        @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+        .fetch-progress h3 { font-size:16px; font-weight:600; margin-bottom:8px; }
+        .fetch-progress p { font-size:13px; color:var(--dim); }
+
+        .theme-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:600; margin-left:6px; vertical-align:middle; }
+        .theme-badge.travel { background:rgba(59,130,246,0.2); color:#60a5fa; }
+        .theme-badge.baby { background:rgba(244,114,182,0.2); color:#f472b6; }
+        .theme-badge.event { background:rgba(251,146,60,0.2); color:#fb923c; }
+        .theme-badge.seasonal { background:rgba(74,222,128,0.2); color:#4ade80; }
+        .theme-badge.daily { background:rgba(120,120,160,0.2); color:var(--dim); }
+        .trip-desc { font-size:11px; color:var(--dim); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+        .select-all-bar { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+        .select-all-btn { background:none; border:1px solid var(--border); color:var(--accent-l); font-size:12px; padding:6px 14px; border-radius:16px; cursor:pointer; }
+        .trip-count { font-size:13px; color:var(--dim); }
+
+        .tip-box { background:var(--accent-bg); border:1px solid rgba(124,106,239,0.25); border-radius:10px; padding:12px 14px; margin-bottom:16px; }
+        .tip-box p { font-size:13px; color:var(--accent-l); line-height:1.5; }
+        .tip-box b { color:var(--text); }
+    </style>
+</head>
+<body>
+<div class="app">
+
+    <!-- ===== 0. 로그인 ===== -->
+    <div id="loginScreen" class="screen active">
+        <div class="spacer"></div>
+        <div class="brand">
+            <div class="brand-icon">&#127796;</div>
+            <h1>TripVideo</h1>
+            <p>구글 포토의 여행 사진이<br>AI 영상으로 자동 변환됩니다</p>
+        </div>
+        <div style="height:32px"></div>
+        <div class="card">
+            <div class="form-group">
+                <label class="form-label">Gemini API Key</label>
+                <div class="input-wrap">
+                    <input class="form-input" type="password" id="loginApiKey" placeholder="AIzaSy..." autocomplete="off" style="padding-right:44px;">
+                    <button class="input-toggle" onclick="togglePw('loginApiKey')">&#128065;</button>
+                </div>
+                <div class="form-hint"><a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>에서 무료 발급</div>
+            </div>
+            <button class="google-btn" id="googleLoginBtn" onclick="doGoogleLogin()">
+                <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                Google 계정으로 로그인
+            </button>
+            <div class="form-hint mt8 center-text">Google 포토에 자동으로 연결됩니다</div>
+        </div>
+        <div class="spacer"></div>
+    </div>
+
+    <!-- ===== 1. 사진 선택 ===== -->
+    <div id="fetchScreen" class="screen">
+        <div class="user-bar" id="userBar"></div>
+
+        <div id="pickerMainView">
+            <div style="text-align:center; padding:24px 0 16px;">
+                <div style="font-size:48px; margin-bottom:12px;">&#128248;</div>
+                <div class="section-title" style="margin-bottom:6px;">Google 포토에서 사진을 선택하세요</div>
+                <p style="font-size:13px; color:var(--dim); line-height:1.6;">
+                    선택하면 AI가 자동으로<br>여행, 이벤트, 성장기록 등 테마별로 분류합니다
+                </p>
+            </div>
+            <div class="tip-box">
+                <p>&#128161; <b>팁:</b> Google 포토에서 원하는 사진을 <b>전체 선택</b>하면<br>AI가 알아서 테마별로 분류해줍니다!</p>
+            </div>
+            <button class="btn" id="fetchBtn" onclick="startPicker()">Google 포토 열기</button>
+        </div>
+
+        <div id="pickerWaitView" style="display:none">
+            <div class="fetch-progress">
+                <div class="emoji">&#128247;</div>
+                <div class="spinner spinner-lg"></div>
+                <h3>Google 포토에서 사진을 선택해주세요</h3>
+                <p>선택을 완료하면 AI가 테마별로 분류합니다</p>
+            </div>
+        </div>
+
+        <div id="fetchingView" style="display:none">
+            <div class="fetch-progress">
+                <div class="emoji">&#129302;</div>
+                <div class="spinner spinner-lg"></div>
+                <h3 id="fetchMsg">AI가 사진을 분석하고 있습니다...</h3>
+                <p>여행, 이벤트, 성장기록 등을 자동 분류 중</p>
+            </div>
+        </div>
+
+        <div class="error-msg" id="fetchError"></div>
+    </div>
+
+    <!-- ===== 2. 테마 선택 ===== -->
+    <div id="tripScreen" class="screen">
+        <div class="user-bar" id="userBar2"></div>
+        <div id="analyzingView" class="loading-view" style="text-align:center;padding:40px 0">
+            <div class="spinner spinner-lg"></div>
+            <p id="analyzingMsg">사진을 분석하고 있어요...</p>
+        </div>
+        <div id="tripsView" style="display:none">
+            <div class="select-all-bar">
+                <div class="section-title" style="margin-bottom:0">어떤 테마를 영상으로?</div>
+                <button class="select-all-btn" id="selectAllBtn" onclick="toggleSelectAll()">전체 선택</button>
+            </div>
+            <div class="trip-count" id="tripCount" style="margin-bottom:12px"></div>
+            <div id="tripList"></div>
+            <div class="settings">
+                <div class="form-group"><label class="form-label">최대 사진</label><select id="maxPhotos"><option value="10">10장</option><option value="20">20장</option><option value="30" selected>30장</option><option value="50">50장</option></select></div>
+                <div class="form-group"><label class="form-label">사진당 시간</label><select id="duration"><option value="3">3초</option><option value="4" selected>4초</option><option value="5">5초</option><option value="6">6초</option></select></div>
+                <div class="form-group"><label class="form-label">장소별 최대</label><select id="maxPerGroup"><option value="3">3장</option><option value="5" selected>5장</option><option value="8">8장</option><option value="10">10장</option></select></div>
+                <div class="form-group"><label class="form-label">자막 언어</label><select id="lang"><option value="ko" selected>한국어</option><option value="en">English</option><option value="ja">日本語</option></select></div>
+            </div>
+            <button class="btn" id="generateBtn" onclick="startGeneration()" disabled>테마를 선택하세요</button>
+        </div>
+        <div class="error-msg" id="tripError"></div>
+    </div>
+
+    <!-- ===== 3. 진행 ===== -->
+    <div id="progressScreen" class="screen">
+        <div class="user-bar" id="userBar3"></div>
+        <div class="card">
+            <div class="section-title">영상 만드는 중...</div>
+            <div class="step pending" id="pStep1"><div class="step-dot">1</div><div class="step-text"><h4>AI 선별</h4><p>베스트 사진을 고르고 있어요</p></div></div>
+            <div class="step pending" id="pStep2"><div class="step-dot">2</div><div class="step-text"><h4>자막 생성</h4><p>감성 자막을 만들고 있어요</p></div></div>
+            <div class="step pending" id="pStep3"><div class="step-dot">3</div><div class="step-text"><h4>영상 렌더링</h4><p>효과 + 자막 합성 중</p></div></div>
+        </div>
+        <div class="error-msg" id="progressError"></div>
+    </div>
+
+    <!-- ===== 4. 결과 ===== -->
+    <div id="resultScreen" class="screen">
+        <div class="user-bar" id="userBar4"></div>
+        <div class="section-title center-text">영상 완성!</div>
+        <div style="height:8px"></div>
+        <video class="video-player" id="videoPlayer" controls playsinline></video>
+        <div class="result-badges" id="resultBadges"></div>
+        <div class="btn-row">
+            <button class="btn" onclick="downloadFile('video')">MP4 저장</button>
+            <button class="btn btn-outline" onclick="downloadFile('srt')">자막 저장</button>
+        </div>
+        <div class="center-text mt16"><a href="javascript:goHome()" class="link">+ 새 영상 만들기</a></div>
+    </div>
+
+</div>
+
+<script>
+let user = null, uploadId = null, currentJobId = null;
+let selectedTrips = new Set(), allTrips = [];
+let pickerSessionId = null, pickerWindow = null, pickerPollTimer = null;
+
+function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    window.scrollTo(0, 0);
+}
+
+function renderUserBar() {
+    if (!user) return;
+    const av = user.picture
+        ? `<div class="user-avatar"><img src="${user.picture}" alt=""></div>`
+        : `<div class="user-avatar">${(user.email||'U')[0].toUpperCase()}</div>`;
+    const h = `<div class="user-info">${av}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${user.name||user.email}</span></div><button class="logout-btn" onclick="doLogout()">로그아웃</button>`;
+    ['userBar','userBar2','userBar3','userBar4'].forEach(id => { const e=document.getElementById(id); if(e) e.innerHTML=h; });
+}
+
+function doGoogleLogin() {
+    const k = document.getElementById('loginApiKey').value.trim();
+    if (!k) { alert('Gemini API Key를 먼저 입력해주세요.'); return; }
+    localStorage.setItem('tv_api_key', k);
+    window.location.href = `/auth/google?api_key=${encodeURIComponent(k)}`;
+}
+function doLogout() { user=null; localStorage.removeItem('tv_user'); window.location.href='/auth/logout'; }
+function goHome() {
+    uploadId=null; currentJobId=null; selectedTrips.clear(); allTrips=[];
+    if(pickerPollTimer){clearTimeout(pickerPollTimer);pickerPollTimer=null;}
+    showScreen('fetchScreen');
+    document.getElementById('fetchingView').style.display='none';
+    document.getElementById('pickerWaitView').style.display='none';
+    resetPickerUI(); hideErr('fetchError');
+}
+
+async function checkLogin() {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('error')) {
+        const m = {'google_not_configured':'Google OAuth 미설정','auth_failed':'인증 실패','access_denied':'접근 거부'};
+        alert(m[p.get('error')] || 'Google 로그인 실패: '+p.get('error'));
+        history.replaceState({},'','/tripvideo'); return;
+    }
+    try {
+        const d = await (await fetch('/api/user')).json();
+        if (d.logged_in) {
+            user = {email:d.email, name:d.name, picture:d.picture, apiKey:localStorage.getItem('tv_api_key')||''};
+            localStorage.setItem('tv_user',JSON.stringify(user));
+            renderUserBar(); showScreen('fetchScreen');
+            history.replaceState({},'','/tripvideo'); return;
+        }
+    } catch(e) {}
+    const sk = localStorage.getItem('tv_api_key');
+    if (sk) document.getElementById('loginApiKey').value = sk;
+    showScreen('loginScreen');
+}
+checkLogin();
+
+function togglePw(id){const i=document.getElementById(id);i.type=i.type==='password'?'text':'password';}
+
+// ── Picker ──
+async function startPicker() {
+    const btn = document.getElementById('fetchBtn');
+    btn.disabled=true; btn.textContent='연결 중...'; hideErr('fetchError');
+    try {
+        const d = await (await fetch('/api/picker/create-session',{method:'POST'})).json();
+        console.log('[picker create]', JSON.stringify(d));
+        if(d.error){showErr('fetchError',d.error);btn.disabled=false;btn.textContent='Google 포토 열기';return;}
+        pickerSessionId = d.id;
+
+        // 대기 화면 먼저 표시
+        document.getElementById('pickerWaitView').style.display='';
+        document.getElementById('pickerMainView').style.display='none';
+
+        // Picker 열기 (팝업 또는 새 탭)
+        pickerWindow = window.open(d.pickerUri, '_blank');
+        if (!pickerWindow) {
+            // 팝업 차단 시 현재 탭에서 열기
+            window.location.href = d.pickerUri;
+            return;
+        }
+
+        // 폴링 시작
+        pollPicker();
+    } catch(e) {
+        console.error('[picker start error]', e);
+        showErr('fetchError','연결 실패. 다시 시도해주세요.');
+        btn.disabled=false; btn.textContent='Google 포토 열기';
+    }
+}
+
+async function pollPicker() {
+    try {
+        const d = await (await fetch(`/api/picker/poll/${pickerSessionId}`)).json();
+        console.log('[picker poll]', JSON.stringify(d));
+        if(d.error){showErr('fetchError',d.error);resetPickerUI();return;}
+        if(d.mediaItemsSet){
+            document.getElementById('pickerWaitView').style.display='none';
+            document.getElementById('fetchingView').style.display='';
+            startPickerFetch(); return;
+        }
+        // 창이 닫혀도 계속 폴링 (새 탭은 .closed가 불안정)
+        // 30분 타임아웃까지 계속 폴링
+        const iv = d.pollingConfig?.pollInterval ? parseInt(d.pollingConfig.pollInterval)*1000 : 2000;
+        pickerPollTimer = setTimeout(pollPicker, Math.max(iv,1000));
+    } catch(e) {
+        console.log('[picker poll error]', e);
+        pickerPollTimer = setTimeout(pollPicker, 3000);
+    }
+}
+
+async function startPickerFetch() {
+    try {
+        const d = await (await fetch('/api/picker/fetch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({picker_session_id:pickerSessionId})})).json();
+        if(d.error){showErr('fetchError',d.error);document.getElementById('fetchingView').style.display='none';resetPickerUI();return;}
+        uploadId = d.upload_id; pollFetch();
+    } catch(e) {showErr('fetchError','사진 가져오기 실패.');document.getElementById('fetchingView').style.display='none';resetPickerUI();}
+}
+
+function resetPickerUI() {
+    document.getElementById('pickerWaitView').style.display='none';
+    document.getElementById('pickerMainView').style.display='';
+    const b=document.getElementById('fetchBtn');b.disabled=false;b.textContent='Google 포토 열기';
+}
+
+async function pollFetch() {
+    try {
+        const d = await (await fetch(`/api/analyze/${uploadId}`)).json();
+        document.getElementById('fetchMsg').textContent = d.message;
+        if(d.status==='ready'){showScreen('tripScreen');document.getElementById('analyzingView').style.display='none';document.getElementById('fetchingView').style.display='none';renderTrips(d.theme_cards);return;}
+        if(d.status==='error'){showErr('fetchError',d.message);document.getElementById('fetchingView').style.display='none';resetPickerUI();return;}
+        setTimeout(pollFetch,1000);
+    } catch(e){setTimeout(pollFetch,2000);}
+}
+
+// ── Theme Cards ──
+const typeLabels={travel:'여행',baby:'아기',event:'이벤트',seasonal:'계절',daily:'일상'};
+
+function renderTrips(themes) {
+    allTrips=themes;
+    document.getElementById('analyzingView').style.display='none';
+    document.getElementById('tripsView').style.display='';
+    const list=document.getElementById('tripList');list.innerHTML='';selectedTrips.clear();
+    document.getElementById('tripCount').textContent=`${themes.length}개 테마 발견`;
+    themes.forEach(t => {
+        const c=document.createElement('div');c.className='trip-card';c.id=`trip-${t.id}`;
+        c.onclick=()=>{toggleTrip(t.id,c);};
+        const th=t.thumbnail?`<img class="trip-thumb" src="/api/thumbnail/${uploadId}/${t.thumbnail}" alt="" onerror="this.outerHTML='<div class=\\'trip-thumb-empty\\'>${t.emoji||'&#127758;'}</div>'">`:`<div class="trip-thumb-empty">${t.emoji||'&#127758;'}</div>`;
+        const bt=t.type||'daily',bl=typeLabels[bt]||bt;
+        c.innerHTML=`${th}<div class="trip-info"><div class="trip-name">${t.emoji||''} ${t.name}<span class="theme-badge ${bt}">${bl}</span></div><div class="trip-meta">${t.date_range||''} &middot; ${t.photo_count}장${t.video_count?' + '+t.video_count+'영상':''}</div>${t.description?`<div class="trip-desc">${t.description}</div>`:''}</div><div class="trip-check">&#10003;</div>`;
+        list.appendChild(c);
+    });
+    updateGenerateBtn();
+}
+function toggleTrip(id,card){if(selectedTrips.has(id)){selectedTrips.delete(id);card.classList.remove('selected');}else{selectedTrips.add(id);card.classList.add('selected');}updateGenerateBtn();}
+function toggleSelectAll(){const b=document.getElementById('selectAllBtn');if(selectedTrips.size===allTrips.length){selectedTrips.clear();document.querySelectorAll('.trip-card').forEach(c=>c.classList.remove('selected'));b.textContent='전체 선택';}else{allTrips.forEach(t=>{selectedTrips.add(t.id);const c=document.getElementById(`trip-${t.id}`);if(c)c.classList.add('selected');});b.textContent='전체 해제';}updateGenerateBtn();}
+function updateGenerateBtn(){const b=document.getElementById('generateBtn');b.disabled=selectedTrips.size===0;b.textContent=selectedTrips.size>0?`${selectedTrips.size}개 테마 영상 만들기`:'테마를 선택하세요';}
+
+// ── Generate ──
+async function startGeneration(){
+    const btn=document.getElementById('generateBtn');btn.disabled=true;btn.textContent='시작 중...';
+    const ak=user?user.apiKey:(localStorage.getItem('tv_api_key')||'');
+    try{
+        const d=await(await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({upload_id:uploadId,selected_trips:Array.from(selectedTrips),max_photos:+document.getElementById('maxPhotos').value,max_per_group:+document.getElementById('maxPerGroup').value,duration:+document.getElementById('duration').value,lang:document.getElementById('lang').value,api_key:ak})})).json();
+        if(d.error){alert(d.error);btn.disabled=false;btn.textContent=`${selectedTrips.size}개 테마 영상 만들기`;return;}
+        currentJobId=d.job_id;showScreen('progressScreen');
+        for(let i=1;i<=3;i++){const s=document.getElementById(`pStep${i}`);s.className='step pending';s.querySelector('.step-dot').textContent=i;}
+        pollProgress();
+    }catch(e){alert('요청 실패');btn.disabled=false;}
+}
+
+async function pollProgress(){
+    try{
+        const d=await(await fetch(`/api/status/${currentJobId}`)).json();
+        const step=d.step||0;
+        for(let i=1;i<=3;i++){const s=document.getElementById(`pStep${i}`);if(i<step){s.className='step done';s.querySelector('.step-dot').textContent='\u2713';}else if(i===step){s.className='step active';s.querySelector('.step-dot').innerHTML='<div class="spinner"></div>';}else{s.className='step pending';s.querySelector('.step-dot').textContent=i;}}
+        if(d.status==='done'){showResult(d);return;}
+        if(d.status==='error'){showErr('progressError',d.message);return;}
+        setTimeout(pollProgress,1000);
+    }catch(e){setTimeout(pollProgress,2000);}
+}
+
+function showResult(job){
+    showScreen('resultScreen');
+    document.getElementById('videoPlayer').src=`/video/${currentJobId}`;
+    let h='';
+    if(job.total_files)h+=`<div class="badge">원본 <b>${job.total_files}개</b></div>`;
+    if(job.selected_count)h+=`<div class="badge">선별 <b>${job.selected_count}개</b></div>`;
+    if(job.total_groups)h+=`<div class="badge">테마 <b>${job.total_groups}개</b></div>`;
+    document.getElementById('resultBadges').innerHTML=h;
+}
+
+function downloadFile(t){if(currentJobId)window.location.href=`/api/download/${currentJobId}/${t}`;}
+function showErr(id,msg){const e=document.getElementById(id);e.textContent=msg;e.classList.add('show');}
+function hideErr(id){const e=document.getElementById(id);e.textContent='';e.classList.remove('show');}
+</script>
+</body>
+</html>
