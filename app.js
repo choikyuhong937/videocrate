@@ -410,6 +410,9 @@ ${lines}
         {
           "name": "선수이름",
           "assigned_position": "배정 포지션 (예: 오른쪽 윙백)",
+          "attack_duty": "높음|보통|낮음",
+          "defense_duty": "높음|보통|낮음",
+          "pass_priority": ["1순위 선수이름", "2순위 선수이름", "3순위 선수이름"],
           "tactic": "이 경기 포메이션과 팀 전술 안에서 이 선수가 해야 할 핵심 역할 (1~2문장, 다른 선수 이름과 구체적 상황 명시)"
         }
       ],
@@ -430,6 +433,12 @@ diagram 규칙:
 - subs는 나머지 ${subCount}명 (이름만)
 - 모든 선수 이름은 위 명단 그대로 사용
 - 선수의 가능한 포지션 내에서 배정
+- attack_duty/defense_duty 기준 (선수 체력·포지션 기반):
+  · 공격수: attack_duty 기본 높음, defense_duty는 체력 높으면 보통, 낮으면 낮음
+  · 수비수: defense_duty 기본 높음, attack_duty는 체력 높으면 보통, 낮으면 낮음
+  · 미드필더: 스타일·체력에 따라 유동적
+  · 체력(stamina) 4이상=높음 가능, 2이하=낮음 권장
+- pass_priority: 이 선수가 공을 받았을 때 먼저 찾아야 할 동료 2~3명 (같은 경기 starters 이름만, 포지션·거리·전술 고려)
 - 각 선수의 tactic은 반드시 아래 기준을 모두 충족:
   1) 이 경기의 포메이션/팀 전술과 직접 연결 (단순 개인 특성 나열 금지)
   2) 다른 선수 이름을 1명 이상 직접 언급 (패스 연결·공간 커버 등)
@@ -509,13 +518,29 @@ function renderResult(d) {
       </div>` : '';
 
     // 선수별 세부전술
+    const dutyColor = { '높음': 'duty-high', '보통': 'duty-mid', '낮음': 'duty-low' };
     const startersHTML = (g.starters || []).map(pi => {
+      const atk = pi.attack_duty || '';
+      const def = pi.defense_duty || '';
+      const dutyHTML = (atk || def) ? `
+        <div class="pi-duty">
+          ${atk ? `<span class="duty-badge atk ${dutyColor[atk] || ''}">⚔ 공격 ${escHtml(atk)}</span>` : ''}
+          ${def ? `<span class="duty-badge def ${dutyColor[def] || ''}">🛡 수비 ${escHtml(def)}</span>` : ''}
+        </div>` : '';
+      const passes = pi.pass_priority || [];
+      const passHTML = passes.length ? `
+        <div class="pi-pass">
+          <span class="pi-pass-label">패스 우선순위</span>
+          ${passes.map((n, i) => `<span class="pi-pass-item">${i + 1}. ${escHtml(n)}</span>`).join('')}
+        </div>` : '';
       return `
       <div class="pi-card">
         <div class="pi-head">
           <span class="pi-name">${escHtml(pi.name)}</span>
           <span class="pi-pos">${escHtml(pi.assigned_position || '')}</span>
         </div>
+        ${dutyHTML}
+        ${passHTML}
         <div class="pi-tactic">${escHtml(pi.tactic || '')}</div>
       </div>`;
     }).join('');
